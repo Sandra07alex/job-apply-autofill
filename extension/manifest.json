@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Job Apply Autofill",
+  "version": "1.0.0",
+  "description": "Fill job applications (LinkedIn, Workday, and other sites) from one saved profile.",
+  "permissions": ["storage", "scripting", "activeTab"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Job Apply Autofill"
+  },
+  "options_page": "options.html",
+  "background": { "service_worker": "background.js" },
+  "commands": {
+    "fill-page": {
+      "suggested_key": { "default": "Alt+Shift+F" },
+      "description": "Fill the application on this page"
+    }
+  }
+}
