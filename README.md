@@ -74,7 +74,7 @@ npm test
 
 - [ ] Handle Workday custom dropdowns (open the listbox, pick the matching option)
 - [ ] Auto-click "Add" for each extra experience / education entry
-- [ ] Saved answers for common screening questions, reused across sites
+- [x] Saved answers for common screening questions, reused across sites
 - [ ] Optional AI drafts for open-ended questions using the job description, shown for review before inserting
 - [ ] Resume upload helper
 - [ ] Application tracker (company, role, date, link) logged on each fill

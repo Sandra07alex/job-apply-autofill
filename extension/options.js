@@ -27,6 +27,10 @@ const EXP = [
   ["current", "I currently work here", "check"],
   ["description", "What you did (description)", "textarea"],
 ];
+const ANS = [
+  ["q", "If the question contains… (e.g. former employee of Ernst)", "wide"],
+  ["a", "Answer (e.g. No)"],
+];
 const MONTHS = ["", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
 const MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -105,6 +109,7 @@ function collect() {
     job: readGrid(document.getElementById("job")),
     education: [...document.getElementById("education").children].map(readGrid),
     experience: [...document.getElementById("experience").children].map(readGrid),
+    answers: [...document.getElementById("answers").children].map(readGrid).filter((a) => a.q && a.a),
   };
 }
 
@@ -113,13 +118,16 @@ function render(p) {
   renderGrid(document.getElementById("personal"), PERSONAL, p.personal || {});
   renderGrid(document.getElementById("job"), JOB, p.job || {});
   const edu = document.getElementById("education"), exp = document.getElementById("experience");
-  edu.innerHTML = ""; exp.innerHTML = "";
+  const ans = document.getElementById("answers");
+  edu.innerHTML = ""; exp.innerHTML = ""; ans.innerHTML = "";
   (p.education && p.education.length ? p.education : [{}]).forEach((e) => addEntry(edu, EDU, e, "Education"));
   (p.experience || []).forEach((e) => addEntry(exp, EXP, e, "Experience"));
+  (p.answers || []).forEach((a) => addEntry(ans, ANS, a, "Answer"));
 }
 
 document.getElementById("addEdu").onclick = () => addEntry(document.getElementById("education"), EDU, {}, "Education");
 document.getElementById("addExp").onclick = () => addEntry(document.getElementById("experience"), EXP, {}, "Experience");
+document.getElementById("addAns").onclick = () => addEntry(document.getElementById("answers"), ANS, {}, "Answer");
 
 document.getElementById("save").onclick = () => {
   chrome.storage.local.set({ profile: collect() }, () => {
