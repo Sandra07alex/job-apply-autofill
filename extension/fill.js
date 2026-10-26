@@ -1,9 +1,10 @@
 // Injected into the page when you click "Fill this page".
 // Wrapped in an IIFE so it can be injected repeatedly without redeclaration errors.
 (async () => {
-  const store = (typeof chrome !== "undefined" && chrome.storage)
-    ? await chrome.storage.local.get(["profile", "settings"])
-    : (window.__AUTOFILL_TEST__ || {});
+  const hasChrome = typeof chrome !== "undefined" && !!chrome.storage;
+  const getStore = (keys) => hasChrome ? chrome.storage.local.get(keys) : Promise.resolve(window.__AUTOFILL_TEST__ || {});
+  const setStore = (v) => hasChrome ? chrome.storage.local.set(v) : Promise.resolve(Object.assign(window.__AUTOFILL_TEST__, v));
+  const store = await getStore(["profile", "settings", "resume"]);
   const profile = store.profile;
   const overwrite = !!(store.settings && store.settings.overwrite);
   if (!profile) return { error: "No profile saved yet. Click \u201cEdit my profile\u201d first." };
@@ -372,14 +373,12 @@
 
   // ---------- Main pass, in page order ----------
   const SKIP = new Set(["hidden", "password", "file", "submit", "button", "image", "reset", "search", "range", "color"]);
-  const fields = [...document.querySelectorAll("input, select, textarea, button[aria-haspopup='listbox']")]
+  const collectFields = () => [...document.querySelectorAll("input, select, textarea, button[aria-haspopup='listbox']")]
     .filter((el) => (el.tagName === "BUTTON" || !SKIP.has(el.type)) && !el.disabled && !el.readOnly && visible(el));
 
-  const idx = { edu: -1, exp: -1 };
-  const used = { edu: new Set(), exp: new Set() };
-  let current = null; // which repeated section we're inside
-  const doneRadios = new Set();
+  let idx, used, current, doneRadios; // reset by each pass
   let filled = 0, unmatched = 0;
+  const leftForYou = new Map(); // fields you answer yourself -> what to learn from them
 
   function entryFor(section, key) {
     if (idx[section] < 0 || used[section].has(key)) { idx[section]++; used[section] = new Set(); }
@@ -389,90 +388,301 @@
     return list[idx[section]];
   }
 
-  for (const el of fields) {
-    // Earlier fills (e.g. "I currently work here") can remove later fields.
-    if (!el.isConnected || !visible(el)) continue;
-    // Radio groups (Yes/No questions)
-    if (el.type === "radio") {
-      if (!el.name || doneRadios.has(el.name)) continue;
-      doneRadios.add(el.name);
-      const group = [...document.querySelectorAll(`input[type=radio][name="${CSS.escape(el.name)}"]`)];
-      const fs = el.closest("fieldset");
-      const gd = (fs ? textOf(fs.querySelector("legend")) : "") + " " +
-        (el.closest("[role='radiogroup']") ? byIds(el.closest("[role='radiogroup']").getAttribute("aria-labelledby")) : "") +
-        " " + textOf(fs || el.parentElement?.parentElement);
-      const c = classify(gd.toLowerCase(), el);
-      const want = savedAnswer(gd.toLowerCase().replace(/\s+/g, " ")) || (c && !c.section ? personalValue(c.key) : "");
-      if (!want || (!overwrite && group.some((r) => r.checked))) continue;
-      const target = group.find((r) => {
-        const lbl = (describe(r) + " " + (r.value || "")).toLowerCase();
-        return new RegExp(`\\b${want.toLowerCase()}\\b`).test(lbl);
-      });
-      if (target) { target.click(); mark(target, true); filled++; await sleep(80); }
-      continue;
-    }
+  async function fillPass() {
+    idx = { edu: -1, exp: -1 };
+    used = { edu: new Set(), exp: new Set() };
+    current = null;
+    doneRadios = new Set();
+    unmatched = 0;
+    leftForYou.clear();
 
-    const d = describe(el);
-    const saved = el.type !== "checkbox" && savedAnswer(d);
-    const c = saved ? { key: "answer" } : classify(d, el);
-    // Already-filled fields still advance section tracking, so entries stay aligned.
-    const hasValue = hasValueOf(el);
-
-    let value = null;
-    if (c) {
-      let section = c.section;
-      if (section === "maybeExp") section = current === "exp" ? "exp" : undefined;
-      if (section === "edu" || section === "exp") {
-        const entry = entryFor(section, c.key);
-        if (entry) {
-          if (c.key === "current") {
-            if (!!entry.current !== el.checked) { el.click(); await sleep(200); }
-            mark(el, true); filled++; continue;
-          }
-          const v = entry[c.key];
-          value = v ? { text: v, alts: c.key === "degree" ? degreeAliases(v) : undefined } : null;
-        }
-      } else if (section === "date") {
-        if (current) {
-          const entry = entryFor(current, c.key);
-          if (entry) value = dateValue(entry, c.key, el);
-        }
-      } else if (el.type !== "checkbox") {
-        let v = saved || personalValue(c.key);
-        if (v && !saved && c.key === "noticePeriod" && (el.type === "number" || /\bdays?\b/.test(d))) v = toDays(v);
-        if (v && !saved && c.key === "dateOfBirth") v = formatDate(v, el);
-        if (v && !saved && c.key === "phoneCountryCode") value = { text: v, alts: [P.country] };
-        else if (v && !saved && c.key === "location") value = { text: v, alts: [[P.city, P.state].filter(Boolean).join(", ")] };
-        else if (v) value = { text: v };
+    for (const el of collectFields()) {
+      // Earlier fills (e.g. "I currently work here") can remove later fields.
+      if (!el.isConnected || !visible(el)) continue;
+      // Radio groups (Yes/No questions)
+      if (el.type === "radio") {
+        if (!el.name || doneRadios.has(el.name)) continue;
+        doneRadios.add(el.name);
+        const group = [...document.querySelectorAll(`input[type=radio][name="${CSS.escape(el.name)}"]`)];
+        const fs = el.closest("fieldset");
+        const gd = (fs ? textOf(fs.querySelector("legend")) : "") + " " +
+          (el.closest("[role='radiogroup']") ? byIds(el.closest("[role='radiogroup']").getAttribute("aria-labelledby")) : "") +
+          " " + textOf(fs || el.parentElement?.parentElement);
+        const c = classify(gd.toLowerCase(), el);
+        const want = savedAnswer(gd.toLowerCase().replace(/\s+/g, " ")) || (c && !c.section ? personalValue(c.key) : "");
+        if (group.some((r) => r.checked) && !overwrite) continue;
+        const target = want && group.find((r) => wordStart(radioLabel(r) + " " + (r.value || ""), want));
+        if (target) { target.click(); mark(target, true); filled++; await sleep(80); }
+        else track(el, c);
+        continue;
       }
-    }
 
-    if (el.type === "checkbox") continue; // never guess on checkboxes (consents, etc.)
-    // Phone code pickers come preset (often "+1 US"); fix them when they don't match.
-    const wrongDefault = c && c.key === "phoneCountryCode" && value && (el.tagName === "SELECT" || el.tagName === "BUTTON") &&
-      !norm(el.tagName === "SELECT" ? (el.selectedOptions[0] || {}).text : textOf(el)).includes(norm(value.text));
-    if (hasValue && !overwrite && !wrongDefault) continue;
+      const d = describe(el);
+      const saved = el.type !== "checkbox" && savedAnswer(d);
+      const c = saved ? { key: "answer" } : classify(d, el);
+      // Already-filled fields still advance section tracking, so entries stay aligned.
+      const hasValue = hasValueOf(el);
 
-    if (value && value.text) {
-      const cands = [value.text, ...(value.alts || [])];
-      let ok;
-      if (el.tagName === "SELECT") ok = setSelect(el, cands);
-      else if (el.tagName === "BUTTON") ok = await fillListButton(el, cands);
-      else if (isPrompt(el) && c.key === "skills") {
-        ok = false;
-        for (const s of value.text.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 15)) {
-          if (await fillPrompt(el, [s])) ok = true;
+      let value = null;
+      if (c) {
+        let section = c.section;
+        if (section === "maybeExp") section = current === "exp" ? "exp" : undefined;
+        if (section === "edu" || section === "exp") {
+          const entry = entryFor(section, c.key);
+          if (entry) {
+            if (c.key === "current") {
+              if (!!entry.current !== el.checked) { el.click(); filled++; await sleep(200); }
+              mark(el, true); continue;
+            }
+            const v = entry[c.key];
+            value = v ? { text: v, alts: c.key === "degree" ? degreeAliases(v) : undefined } : null;
+          }
+        } else if (section === "date") {
+          if (current) {
+            const entry = entryFor(current, c.key);
+            if (entry) value = dateValue(entry, c.key, el);
+          }
+        } else if (el.type !== "checkbox") {
+          let v = saved || personalValue(c.key);
+          if (v && !saved && c.key === "noticePeriod" && (el.type === "number" || /\bdays?\b/.test(d))) v = toDays(v);
+          if (v && !saved && c.key === "dateOfBirth") v = formatDate(v, el);
+          if (v && !saved && c.key === "phoneCountryCode") value = { text: v, alts: [P.country] };
+          else if (v && !saved && c.key === "location") value = { text: v, alts: [[P.city, P.state].filter(Boolean).join(", ")] };
+          else if (v) value = { text: v };
         }
-      } else if (isPrompt(el)) ok = await fillPrompt(el, cands);
-      else if (c.key === "skills" && el.tagName === "INPUT") ok = await fillTags(el, value.text);
-      else { setText(el, value.text); ok = true; }
-      mark(el, ok);
-      ok ? filled++ : unmatched++;
-      await sleep(80);
-    } else if (!hasValue) {
-      if (el.required || el.getAttribute("aria-required") === "true" || !c) { mark(el, false); unmatched++; }
+      }
+
+      if (el.type === "checkbox") continue; // never guess on checkboxes (consents, etc.)
+      // Phone code pickers come preset (often "+1 US"); fix them when they don't match.
+      const wrongDefault = c && c.key === "phoneCountryCode" && value && (el.tagName === "SELECT" || el.tagName === "BUTTON") &&
+        !norm(el.tagName === "SELECT" ? (el.selectedOptions[0] || {}).text : textOf(el)).includes(norm(value.text));
+      if (hasValue && !overwrite && !wrongDefault) continue;
+
+      if (value && value.text) {
+        const cands = [value.text, ...(value.alts || [])];
+        let ok;
+        if (el.tagName === "SELECT") ok = setSelect(el, cands);
+        else if (el.tagName === "BUTTON") ok = await fillListButton(el, cands);
+        else if (isPrompt(el) && c.key === "skills") {
+          ok = false;
+          for (const s of value.text.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 15)) {
+            if (await fillPrompt(el, [s])) ok = true;
+          }
+        } else if (isPrompt(el)) ok = await fillPrompt(el, cands);
+        else if (c.key === "skills" && el.tagName === "INPUT") ok = await fillTags(el, value.text);
+        else { setText(el, value.text); ok = true; }
+        mark(el, ok);
+        if (ok) filled++;
+        else { unmatched++; track(el, c); }
+        await sleep(80);
+      } else if (!hasValue) {
+        if (el.required || el.getAttribute("aria-required") === "true" || !c) { mark(el, false); unmatched++; }
+        track(el, c);
+      }
     }
   }
 
-  return { filled, unmatched };
+  // ---------- "Add" buttons for more education / experience blocks ----------
+  const SECTION_RE = { exp: /experience|employment|work\s*history|internship/i, edu: /education|academic|qualification/i };
+  const ANY_SECTION_RE = /experience|employment|work|internship|education|academic|qualification|language|skill|website|link|certif|project|reference|document|attachment/i;
+
+  function headingBefore(el) {
+    const hs = [...document.querySelectorAll("h1, h2, h3, h4, h5, h6, legend, [role='heading']")]
+      .filter((h) => h.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+    return textOf(hs[hs.length - 1]);
+  }
+  function addButtonFor(section) {
+    return [...document.querySelectorAll("button, [role='button'], a")].find((b) => {
+      const own = textOf(b) + " " + (b.getAttribute("aria-label") || "");
+      if (!visible(b) || !/^\s*\+?\s*add\b/i.test(own)) return false;
+      if (SECTION_RE[section].test(own)) return true;
+      return !ANY_SECTION_RE.test(own) && SECTION_RE[section].test(headingBefore(b));
+    });
+  }
+
+  // Clicks "Add" until the page has a block for every profile entry. Returns true if it added any.
+  async function addMissingEntries() {
+    let added = false;
+    for (const [section, list] of [["exp", EXP], ["edu", EDU]]) {
+      let missing = Math.min(5, list.length - (idx[section] + 1));
+      while (missing-- > 0) {
+        const btn = addButtonFor(section); // Workday swaps "Add" for "Add Another" after the first
+        if (!btn) break;
+        const dialogs = document.querySelectorAll("[role='dialog'], [aria-modal='true']").length;
+        press(btn);
+        added = true;
+        await sleep(700);
+        // A pop-up form (e.g. Keka): fill that one and let you save it before adding more.
+        if (document.querySelectorAll("[role='dialog'], [aria-modal='true']").length > dialogs) return true;
+      }
+    }
+    return added;
+  }
+
+  // ---------- Resume upload ----------
+  // Text around a (usually hidden) file input, e.g. "Resume/CV Drop files here".
+  function uploadContext(el) {
+    let p = el.parentElement;
+    for (let i = 0; i < 6 && p && p !== document.body; i++, p = p.parentElement) {
+      const t = textOf(p);
+      if (t) return t.length < 400 ? t : "";
+    }
+    return "";
+  }
+  async function attachResume() {
+    const r = store.resume;
+    if (!r || !r.data) return 0;
+    window.__autofillUploads = window.__autofillUploads || new Set();
+    let n = 0;
+    for (const el of document.querySelectorAll("input[type=file]")) {
+      if (el.disabled || (el.files && el.files.length)) continue;
+      const ctx = (describe(el) + " " + uploadContext(el)).toLowerCase();
+      if (/cover\s*letter/.test(ctx) || !/resume|\bcv\b|curriculum/.test(ctx)) continue;
+      // Some sites reset the input after uploading; don't upload twice on one page.
+      const doneKey = location.href + "|" + ctx.slice(0, 80);
+      if (window.__autofillUploads.has(doneKey)) continue;
+      const bin = atob(r.data.slice(r.data.indexOf(",") + 1));
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const dt = new DataTransfer();
+      dt.items.add(new File([bytes], r.name || "resume.pdf", { type: r.type || "application/pdf" }));
+      el.files = dt.files;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      window.__autofillUploads.add(doneKey);
+      n++;
+      await sleep(300);
+    }
+    return n;
+  }
+
+  // ---------- Learning from what you answer yourself ----------
+  // Never learned: consents and agreements (they differ per company) and open questions.
+  const NO_LEARN = /consent|agree|terms|privacy|acknowledg|certif|declar|signature|attest|\bwhy\b|cover\s*letter|tell\s*us|describe|explain|summary/i;
+  // Profile fields an answer can be saved into (dates, phone code and skills have their own formats).
+  const LEARN_INTO = {
+    personal: new Set(["firstName", "lastName", "gender", "email", "phone", "addressLine1", "city", "state", "postalCode", "country", "linkedin", "github", "portfolio"]),
+    job: new Set(["totalExperience", "noticePeriod", "currentCtc", "expectedCtc", "workAuthorized", "needSponsorship", "willingToRelocate"]),
+  };
+
+  function labelText(l) {
+    if (!l) return "";
+    const copy = l.cloneNode(true);
+    copy.querySelectorAll("select, option, input, textarea, button").forEach((x) => x.remove());
+    return textOf(copy);
+  }
+  function radioLabel(r) {
+    let t = "";
+    if (r.id) { try { t = labelText(document.querySelector(`label[for="${CSS.escape(r.id)}"]`)); } catch (_) {} }
+    return t || labelText(r.closest("label")) || r.getAttribute("aria-label") || r.value || "";
+  }
+  function questionOf(el) {
+    let t = "";
+    if (el.type === "radio") {
+      const fs = el.closest("fieldset"), rg = el.closest("[role='radiogroup']");
+      let box = el.parentElement;
+      const n = document.querySelectorAll(`input[type=radio][name="${CSS.escape(el.name)}"]`).length;
+      while (box && box !== document.body && box.querySelectorAll(`input[type=radio][name="${CSS.escape(el.name)}"]`).length < n) box = box.parentElement;
+      t = (fs && textOf(fs.querySelector("legend"))) || (rg && (byIds(rg.getAttribute("aria-labelledby")) || rg.getAttribute("aria-label"))) ||
+        (box ? nearbyLabel(box) : "");
+    } else {
+      if (el.id) { try { t = labelText(document.querySelector(`label[for="${CSS.escape(el.id)}"]`)); } catch (_) {} }
+      t = t || labelText(el.closest("label")) || byIds(el.getAttribute("aria-labelledby")) || el.getAttribute("aria-label") || nearbyLabel(el);
+    }
+    return t.replace(/\*/g, " ").replace(/\b(required|optional)\b/gi, " ").replace(/\s+/g, " ").replace(/[\s:]+$/, "").trim().slice(0, 150);
+  }
+  function answerOf(el) {
+    if (el.type === "radio") {
+      const r = [...document.querySelectorAll(`input[type=radio][name="${CSS.escape(el.name)}"]`)].find((x) => x.checked);
+      return r ? radioLabel(r) : "";
+    }
+    if (el.tagName === "SELECT") return el.selectedIndex > 0 ? textOf(el.selectedOptions[0]) : "";
+    if (el.tagName === "BUTTON") return hasValueOf(el) ? textOf(el) : "";
+    return el.value.trim().slice(0, 80);
+  }
+
+  // Remember a field you'll answer yourself, so your answer can be saved for next time.
+  function track(el, c) {
+    if (isPrompt(el) || el.type === "checkbox") return;
+    // Free-text boxes are job-specific ("Why us?"), unless they ask for a profile value like CTC.
+    if (el.tagName === "TEXTAREA" && !(c && c.key !== "answer")) return;
+    if (c && (c.section === "edu" || c.section === "exp" || c.section === "date")) return;
+    const q = questionOf(el);
+    if (q.length < 4 || NO_LEARN.test(q)) return;
+    let profileKey = null;
+    if (c && c.key !== "answer") {
+      const group = Object.keys(LEARN_INTO).find((g) => LEARN_INTO[g].has(c.key));
+      if (!group) return; // e.g. "current company" comes from your experience entries
+      profileKey = [group, c.key];
+    }
+    leftForYou.set(el, { q, profileKey, before: answerOf(el) });
+  }
+
+  function toast(message, onUndo) {
+    const box = document.createElement("div");
+    box.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:2147483647;max-width:360px;background:#1f2937;color:#fff;" +
+      "font:13px/1.4 system-ui,sans-serif;padding:10px 12px;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.25);display:flex;gap:10px;align-items:center";
+    const text = document.createElement("span");
+    text.textContent = message;
+    const undo = document.createElement("button");
+    undo.textContent = "Undo";
+    undo.style.cssText = "background:none;border:1px solid #9ca3af;color:#fff;border-radius:6px;padding:2px 8px;cursor:pointer;font:inherit";
+    undo.onclick = () => { onUndo(); box.remove(); };
+    box.append(text, undo);
+    document.body.appendChild(box);
+    setTimeout(() => box.remove(), 7000);
+  }
+
+  async function remember(t, answer) {
+    const p = (await getStore(["profile"])).profile;
+    if (!p) return;
+    let undo;
+    if (t.profileKey) {
+      const [group, k] = t.profileKey;
+      p[group] = p[group] || {};
+      if (p[group][k]) return; // never replace what you typed on the profile page
+      p[group][k] = answer;
+      undo = async () => {
+        const q = (await getStore(["profile"])).profile;
+        if (q[group][k] === answer) { q[group][k] = ""; await setStore({ profile: q }); }
+      };
+    } else {
+      const same = (x) => String(x.q).toLowerCase() === t.q.toLowerCase();
+      const before = (p.answers || []).find(same);
+      p.answers = (p.answers || []).filter((x) => !same(x)).concat({ q: t.q, a: answer });
+      undo = async () => {
+        const q = (await getStore(["profile"])).profile;
+        q.answers = (q.answers || []).filter((x) => !same(x)).concat(before ? [before] : []);
+        await setStore({ profile: q });
+      };
+    }
+    await setStore({ profile: p });
+    const short = t.q.length > 60 ? t.q.slice(0, 57) + "…" : t.q;
+    toast(`Saved for next time: “${short}” → ${answer}`, undo);
+  }
+
+  // Checks once a second; saves an answer once it has stayed the same for ~2 seconds.
+  function startLearning() {
+    clearInterval(window.__autofillLearner);
+    if (!leftForYou.size) return;
+    const started = Date.now();
+    window.__autofillLearner = setInterval(async () => {
+      if (Date.now() - started > 20 * 60e3 || !leftForYou.size) return clearInterval(window.__autofillLearner);
+      for (const [el, t] of leftForYou) {
+        if (!el.isConnected) { leftForYou.delete(el); continue; }
+        const a = answerOf(el);
+        if (!a || a === t.before || a !== t.seen) { t.seen = a; t.stable = 0; continue; }
+        if (++t.stable < 2) continue;
+        leftForYou.delete(el);
+        await remember(t, a);
+      }
+    }, 1000);
+  }
+
+  // ---------- Run ----------
+  await fillPass();
+  if (await addMissingEntries()) await fillPass();
+  const uploaded = await attachResume();
+  startLearning();
+  return { filled, unmatched, uploaded, watching: leftForYou.size };
 })();

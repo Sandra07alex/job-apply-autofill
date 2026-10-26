@@ -3,7 +3,7 @@
   "name": "Job Apply Autofill",
   "version": "1.0.0",
   "description": "Fill job applications (LinkedIn, Workday, and other sites) from one saved profile.",
-  "permissions": ["storage", "scripting", "activeTab"],
+  "permissions": ["storage", "unlimitedStorage", "scripting", "activeTab"],
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_popup": "popup.html",

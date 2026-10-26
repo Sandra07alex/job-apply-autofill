@@ -171,6 +171,26 @@ document.getElementById("parseResume").onclick = () => {
     "Check everything below, then click Save profile.";
 };
 
+// Resume file: stored on its own (saved straight away, not part of the backup file).
+const resumeName = document.getElementById("resumeName"), resumeRemove = document.getElementById("resumeRemove");
+function showResume(r) {
+  resumeName.textContent = r ? `Saved: ${r.name}` : "No resume saved yet.";
+  resumeRemove.hidden = !r;
+}
+chrome.storage.local.get("resume", ({ resume }) => showResume(resume));
+document.getElementById("resumeFile").onchange = (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  if (f.size > 5 * 1024 * 1024) { alert("That file is over 5 MB. Most job sites won't accept it."); return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    const resume = { name: f.name, type: f.type, data: reader.result };
+    chrome.storage.local.set({ resume }, () => showResume(resume));
+  };
+  reader.readAsDataURL(f);
+};
+resumeRemove.onclick = () => chrome.storage.local.remove("resume", () => showResume(null));
+
 document.getElementById("export").onclick = () => {
   const blob = new Blob([JSON.stringify(collect(), null, 2)], { type: "application/json" });
   const a = document.createElement("a");

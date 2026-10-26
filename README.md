@@ -13,6 +13,9 @@ Applying to jobs means entering identical information dozens of times across dif
 - **One profile:** personal details, job preferences, multiple education entries and multiple work experience / internship entries
 - **Paste your resume** on the profile page to fill it in automatically (parsed locally, nothing uploaded)
 - **Saved answers** for screening questions ("former employee of…" → No), reused on every site
+- **Learns from you:** answer a field it couldn't, and it saves that answer for next time (with Undo). Consents and open questions are never learned
+- **Resume upload:** attaches your saved resume to "Resume / CV" upload boxes
+- **Adds blocks:** clicks "Add" until there's an education / experience block for every profile entry
 - **Workday pickers:** opens "Select One" lists and picks from School / Skills search suggestions
 - **One click or one shortcut** (`Alt+Shift+F`) to fill the current page
 - **Repeated sections:** fills Experience 1, Experience 2, Education 1 and so on with the right entry
@@ -36,7 +39,7 @@ Applying to jobs means entering identical information dozens of times across dif
 2. Click the extension icon, then **Fill this page** (or press `Alt+Shift+F`).
 3. Fix anything outlined in orange, review everything, and submit yourself.
 
-**Workday tip:** Workday only shows one experience/education block until you click **Add**. Click **Add** once per entry in your profile, then press Fill again; already-filled fields are left alone.
+**Workday tip:** if your profile has more education or experience entries than the page shows, Fill clicks **Add** for you.
 
 ## Project structure
 
@@ -73,16 +76,16 @@ npm test
 - **Resume parsing** is rule-based, so unusual layouts (tables, two columns) may come out partly wrong; always review before saving.
 - **Open-ended questions** ("Why do you want to work here?") are left blank.
 - **Skill-specific questions** ("Years of experience with Python?") are deliberately left blank rather than guessed.
-- **Doesn't click "Add"** buttons for extra experience/education blocks.
 
 ## Roadmap
 
 - [x] Handle Workday custom dropdowns (open the listbox, pick the matching option)
 - [x] Fill the profile by pasting resume text
-- [ ] Auto-click "Add" for each extra experience / education entry
+- [x] Auto-click "Add" for each extra experience / education entry
 - [x] Saved answers for common screening questions, reused across sites
 - [ ] Optional AI drafts for open-ended questions using the job description, shown for review before inserting
-- [ ] Resume upload helper
+- [x] Resume upload helper
+- [x] Learn answers from fields you fill in yourself
 - [ ] Application tracker (company, role, date, link) logged on each fill
 - [ ] Site-specific rules for Naukri, Instahyre, Greenhouse, Lever
 

@@ -39,6 +39,10 @@
     <textarea id="resumeText" placeholder="Paste your resume text here"></textarea>
     <div class="row"><button class="primary" id="parseResume">Fill my profile from this</button><span id="parsed"></span></div>
   </section>
+  <section><h2>Resume file</h2>
+    <p class="sub">Attached automatically to "Resume / CV" upload boxes (never to cover letter boxes). PDF or Word, up to 5 MB.</p>
+    <div class="row"><input type="file" id="resumeFile" accept=".pdf,.doc,.docx"><span id="resumeName"></span><button id="resumeRemove" class="danger" hidden>Remove</button></div>
+  </section>
   <section><h2>Personal details</h2><div class="grid" id="personal"></div></section>
   <section><h2>Job preferences</h2><div class="grid" id="job"></div></section>
   <section><h2>Education <button id="addEdu">+ Add education</button></h2><div id="education"></div></section>

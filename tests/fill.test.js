@@ -103,4 +103,32 @@ await run('rippling',
 <script>const loc=document.querySelector('[name=f-loc]'),ul=document.getElementById('locs');
 loc.addEventListener('input',()=>setTimeout(()=>{ul.innerHTML='';for(const o of ['Kochi, Kerala, India','Kochin, Sri Lanka']){
  const li=document.createElement('li');li.setAttribute('role','option');li.textContent=o;li.onclick=()=>{loc.value=o;ul.innerHTML='';};ul.append(li);}},600));</script>`);
+// Add buttons, resume upload, and learning from answers you give yourself.
+{
+  const page=await browser.newPage();
+  await page.setContent(`<body>
+<h3>Education</h3><div id=edu></div><button id=addEdu>Add</button>
+<div><h3>Resume/CV</h3><div>Drop files here <input type=file id=resume style="display:none"></div></div>
+<div><h3>Cover letter</h3><div>Drop or select <input type=file id=cover style="display:none"></div></div>
+<label for=hear>How did you hear about us?</label><select id=hear><option value="">Select</option><option>LinkedIn</option><option>Naukri</option></select>
+<div class=field><div>Current CTC (Fixed + Variable)</div><textarea id=ctc></textarea></div>
+<label for=ok>I agree to the privacy policy</label><select id=ok><option value="">Select</option><option>Yes</option></select>
+<script>let n=0;document.getElementById('addEdu').onclick=()=>{n++;const b=document.getElementById('addEdu');b.textContent='Add Another';
+ document.getElementById('edu').insertAdjacentHTML('beforeend',
+ '<input aria-label="School or University" name=school'+n+'><input aria-label="Degree" name=degree'+n+'>');};</script></body>`);
+  const p2=JSON.parse(JSON.stringify(profile));
+  p2.education.push({school:'GHSS Patikkad',degree:'Higher Secondary'});
+  await page.evaluate(p=>{window.__AUTOFILL_TEST__={profile:p,resume:{name:'Anu_Resume.pdf',type:'application/pdf',data:'data:application/pdf;base64,JVBERi0xLjQ='}}},p2);
+  const r=await page.evaluate(src);console.log('== add-upload-learn',JSON.stringify(r));
+  console.log('   education blocks  ',await page.evaluate(()=>[...document.querySelectorAll('#edu input')].map(e=>e.value).join(' | ')));
+  console.log('   resume / cover    ',await page.evaluate(()=>[resume.files[0]&&resume.files[0].name,cover.files.length]));
+  // You answer the fields it couldn't, like a person would.
+  await page.selectOption('#hear',{label:'LinkedIn'});await page.fill('#ctc','4 LPA');await page.selectOption('#ok',{label:'Yes'});
+  await page.waitForTimeout(3500);
+  const saved=await page.evaluate(()=>({answers:window.__AUTOFILL_TEST__.profile.answers.slice(3),ctc:window.__AUTOFILL_TEST__.profile.job.currentCtc,toast:document.body.lastElementChild.textContent}));
+  console.log('   learned answers   ',JSON.stringify(saved.answers));
+  console.log('   learned CTC       ',saved.ctc);
+  console.log('   toast             ',saved.toast);
+  await page.close();
+}
 await browser.close();})();
