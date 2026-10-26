@@ -86,4 +86,21 @@ await run('keka',`
 <script>const k4=document.getElementById('k4');k4.addEventListener('keydown',e=>{if(e.key==='Enter'&&k4.value){
  const t=document.createElement('input');t.name='tag';t.value=k4.value;t.disabled=true;document.getElementById('tags').append(t);k4.value='';}});
 k4.addEventListener('blur',()=>{k4.value=''});</script>`);
+// Rippling-style: labels in plain divs (not linked), a "+1 US" phone code preset,
+// a location box whose suggestions arrive late, textareas, and consent radios.
+const rf=(label,field)=>`<div class=field><div class=lbl><span>${label}</span><span>*</span></div><div class=ctl>${field}</div></div>`;
+await run('rippling',
+ rf('Current company','<input name="f-1a2b">')+
+ rf('Phone number','<div class=row><select name="f-cc"><option>+1 US</option><option>+44 GB</option><option>+91 IN</option></select><input type=tel name="f-ph"></div>')+
+ rf('Location','<input name="f-loc" role=combobox aria-autocomplete=list aria-controls=locs><ul id=locs role=listbox></ul>')+
+ rf('Overall Experience (Years)','<input name="f-3c4d">')+
+ rf('Current CTC (Fixed + Variable)','<textarea name="f-5e6f"></textarea>')+
+ rf('Expected CTC','<textarea name="f-7a8b"></textarea>')+
+ rf('Notice Period (days)','<textarea name="f-9c0d"></textarea>')+
+ `<p>Check Yes or No to indicate your agreement to receive text messages.</p>
+ <label><input type=radio name=sms value=yes>Yes - I consent to receiving text messages</label>
+ <label><input type=radio name=sms value=no>No - I do not consent</label>
+<script>const loc=document.querySelector('[name=f-loc]'),ul=document.getElementById('locs');
+loc.addEventListener('input',()=>setTimeout(()=>{ul.innerHTML='';for(const o of ['Kochi, Kerala, India','Kochin, Sri Lanka']){
+ const li=document.createElement('li');li.setAttribute('role','option');li.textContent=o;li.onclick=()=>{loc.value=o;ul.innerHTML='';};ul.append(li);}},600));</script>`);
 await browser.close();})();

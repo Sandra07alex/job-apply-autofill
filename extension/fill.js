@@ -18,6 +18,27 @@
   const textOf = (el) => (el ? (el.innerText || el.textContent || "") : "").replace(/\s+/g, " ").trim();
   const byIds = (ids) => (ids || "").split(/\s+/).map((id) => textOf(document.getElementById(id))).join(" ");
 
+  // Text of the closest earlier sibling (of the field or a wrapper) that isn't itself
+  // a field. It may climb out of one small group of fields (a phone code + number row
+  // shares one label), but stops before reaching another question's label.
+  const CONTROL_SEL = "input:not([type=hidden]), select, textarea";
+  function nearbyLabel(el) {
+    let allowed = 1;
+    for (let node = el, i = 0; i < 5 && node.parentElement && node !== document.body; i++, node = node.parentElement) {
+      for (let s = node.previousElementSibling, j = 0; s && j < 3; s = s.previousElementSibling, j++) {
+        if (s.matches(CONTROL_SEL) || s.querySelector(CONTROL_SEL)) break;
+        const t = textOf(s);
+        if (t) return t.length < 200 ? t : "";
+      }
+      const n = node.parentElement.querySelectorAll(CONTROL_SEL).length;
+      if (n > allowed) {
+        if (allowed > 1) return "";
+        allowed = n;
+      }
+    }
+    return "";
+  }
+
   function describe(el) {
     const parts = [];
     if (el.id) {
@@ -30,7 +51,10 @@
     if (wrapLabel && el.type !== "radio" && el.type !== "checkbox") parts.push(textOf(wrapLabel));
     if (el.type === "checkbox" && wrapLabel) parts.push(textOf(wrapLabel));
     parts.push(byIds(el.getAttribute("aria-labelledby")));
-    parts.push(el.getAttribute("aria-label") || "", el.placeholder || "", el.name || "", el.id || "");
+    parts.push(el.getAttribute("aria-label") || "");
+    // No linked label (e.g. Rippling): use the label text sitting just before the field.
+    if (!parts.some(Boolean) && el.type !== "radio" && el.type !== "checkbox") parts.push(nearbyLabel(el));
+    parts.push(el.placeholder || "", el.name || "", el.id || "");
     parts.push(el.getAttribute("data-automation-id") || "");
     const wd = el.closest("[data-automation-id^='formField']");
     if (wd) parts.push(wd.getAttribute("data-automation-id"));
@@ -61,6 +85,8 @@
     if (t(/github/)) return { key: "github" };
     if (t(/country\s*(phone\s*)?code|dial(ling)?\s*code|phone.*(country|code)|\bisd\b/)) return { key: "phoneCountryCode" };
     if (t(/extension|\bext\b|device\s*type|phone\s*type/)) return null;
+    // A dropdown in the phone row can only be the country code ("+1 US").
+    if ((el.tagName === "SELECT" || el.tagName === "BUTTON") && t(/phone|mobile/)) return { key: "phoneCountryCode" };
     if (t(/phone|mobile|contact\s*number|\bcell/)) return { key: "phone" };
     if (t(/notice|available\s*to\s*join|joining\s*(time|period)|can\s*(you\s*)?join/)) return { key: "noticePeriod" };
     if (t(/date\s*of\s*birth|birth\s*date|\bdob\b/)) return { key: "dateOfBirth" };
@@ -73,6 +99,9 @@
     if (t(/sponsor|visa/)) return { key: "needSponsorship" };
     if (t(/authori[sz]ed|legally.*work|eligible\s*to\s*work|right\s*to\s*work/)) return { key: "workAuthorized" };
     if (t(/relocat/)) return { key: "willingToRelocate" };
+    // One-off "current company / title" questions, not an experience block.
+    if (t(/(current(ly)?|present)\s*(company|employer|organi[sz]ation)/)) return { key: "currentCompany" };
+    if (t(/(current|present)\s*(job\s*)?(title|designation|role|position)/)) return { key: "currentTitle" };
     // Screening questions ("...agreement with your current employer?") only get the
     // answers above or a saved answer, never a profile field like company or name.
     if (d.includes("?") || d.length > 200) return null;
@@ -121,7 +150,24 @@
   // The user's saved answer whose words appear in the question, if any.
   const savedAnswer = (d) => (ANSWERS.find((x) => d.includes(x.q)) || {}).a;
 
+  // Total years across experience entries, e.g. "1.5", when the profile doesn't say.
+  function yearsOfExperience() {
+    const now = new Date(), nowM = now.getFullYear() * 12 + now.getMonth();
+    let months = 0;
+    for (const e of EXP) {
+      if (!e.startYear || (!e.current && !e.endYear)) continue;
+      const start = +e.startYear * 12 + (+e.startMonth || 1) - 1;
+      const end = e.current ? nowM : +e.endYear * 12 + (+e.endMonth || 12) - 1;
+      months += Math.max(0, end - start + 1);
+    }
+    return months ? String(Math.round(months / 1.2) / 10) : "";
+  }
+
   function personalValue(key) {
+    const nowJob = EXP.find((e) => e.current) || {};
+    if (key === "currentCompany") return nowJob.company || "";
+    if (key === "currentTitle") return nowJob.title || "";
+    if (key === "totalExperience" && !J.totalExperience) return yearsOfExperience();
     if (key === "fullName") return [P.firstName, P.lastName].filter(Boolean).join(" ");
     if (key in P) return P[key];
     if (key in J) return J[key];
@@ -171,6 +217,12 @@
     if (!keepFocus) el.blur();
   }
 
+  // Does the text contain the candidate as whole words (ignoring punctuation)?
+  const wordStart = (text, cand) => {
+    const w = (s) => " " + String(s || "").toLowerCase().replace(/[^a-z0-9+]+/g, " ").trim() + " ";
+    return w(text).includes(w(cand));
+  };
+
   // Best-scoring item for any candidate (exact > contains > shared words), or null.
   function pickBest(items, getText, candidates) {
     let best = null, bestScore = 0;
@@ -182,7 +234,8 @@
         if (!c) continue;
         let s = 0;
         if (o === c) s = 100;
-        else if (o.includes(c)) s = 60 + 20 * c.length / o.length;
+        // "Kochi" should prefer "Kochi, Kerala" over "Kochin, Sri Lanka".
+        else if (o.includes(c)) s = 60 + 20 * c.length / o.length - (wordStart(getText(it), raw) ? 0 : 25);
         else if (c.length > 3 && c.includes(o)) s = 40 + 20 * o.length / c.length;
         else {
           const ow = words(getText(it)), cw = words(raw);
@@ -222,7 +275,7 @@
   }
 
   // Popup options (Workday list buttons and search boxes, ARIA comboboxes).
-  const OPTION_SEL = "[role='option'], [data-automation-id='promptOption']";
+  const OPTION_SEL = "[role='option'], [data-automation-id='promptOption'], .pac-item";
   function openOptions(el) {
     const ids = (el.getAttribute("aria-controls") || el.getAttribute("aria-owns") || "").split(/\s+/).filter(Boolean);
     const scopes = ids.map((id) => document.getElementById(id)).filter(Boolean);
@@ -258,7 +311,8 @@
   // Search boxes only accept a value picked from their suggestions.
   async function fillPrompt(el, candidates) {
     setText(el, candidates[0], true);
-    let opt = await waitForMatch(el, candidates, 800);
+    // Suggestions often come from a server, so give them time (Workday waits for Enter instead).
+    let opt = await waitForMatch(el, candidates, isWorkdayPrompt(el) ? 500 : 2000);
     // Workday searches on Enter. Only press it when no list is showing, since on other
     // sites Enter would pick whatever option is highlighted (or submit the form).
     if (!opt && isWorkdayPrompt(el) && !openOptions(el).length) {
@@ -387,12 +441,17 @@
         let v = saved || personalValue(c.key);
         if (v && !saved && c.key === "noticePeriod" && (el.type === "number" || /\bdays?\b/.test(d))) v = toDays(v);
         if (v && !saved && c.key === "dateOfBirth") v = formatDate(v, el);
-        if (v) value = { text: v };
+        if (v && !saved && c.key === "phoneCountryCode") value = { text: v, alts: [P.country] };
+        else if (v && !saved && c.key === "location") value = { text: v, alts: [[P.city, P.state].filter(Boolean).join(", ")] };
+        else if (v) value = { text: v };
       }
     }
 
     if (el.type === "checkbox") continue; // never guess on checkboxes (consents, etc.)
-    if (hasValue && !overwrite) continue;
+    // Phone code pickers come preset (often "+1 US"); fix them when they don't match.
+    const wrongDefault = c && c.key === "phoneCountryCode" && value && (el.tagName === "SELECT" || el.tagName === "BUTTON") &&
+      !norm(el.tagName === "SELECT" ? (el.selectedOptions[0] || {}).text : textOf(el)).includes(norm(value.text));
+    if (hasValue && !overwrite && !wrongDefault) continue;
 
     if (value && value.text) {
       const cands = [value.text, ...(value.alts || [])];
