@@ -1,6 +1,6 @@
 const {chromium}=require('playwright');const fs=require('fs');
 const src=fs.readFileSync(require('path').join(__dirname,'..','extension','fill.js'),'utf8');
-const profile={personal:{firstName:'Anu',lastName:'Mathew',email:'anu@x.com',phone:'9876543210',phoneCountryCode:'+91',addressLine1:'12 MG Road',city:'Kochi',postalCode:'682001',country:'India',linkedin:'https://linkedin.com/in/anu',portfolio:'https://anu.dev'},
+const profile={personal:{firstName:'Anu',lastName:'Mathew',gender:'Female',dateOfBirth:'2002-05-14',email:'anu@x.com',phone:'9876543210',phoneCountryCode:'+91',addressLine1:'12 MG Road',city:'Kochi',postalCode:'682001',country:'India',linkedin:'https://linkedin.com/in/anu',portfolio:'https://anu.dev'},
 job:{noticePeriod:'Immediate',expectedCtc:'6 LPA',workAuthorized:'Yes',needSponsorship:'No',totalExperience:'1',skills:'Python, React'},
 education:[{school:'CUSAT',degree:'B.Tech',field:'CSE',gpa:'8.2',startMonth:'08',startYear:'2020',endMonth:'05',endYear:'2024'}],
 experience:[{title:'Intern',company:'Acme',location:'Kochi',startMonth:'01',startYear:'2024',endMonth:'06',endYear:'2024',description:'Built stuff'},
@@ -77,4 +77,13 @@ await run('workday-questions',
 document.querySelectorAll('button[data-opts]').forEach(b=>b.onclick=()=>{list.innerHTML='';list.hidden=false;
  for(const o of b.dataset.opts.split('|')){const li=document.createElement('li');li.setAttribute('role','option');li.textContent=o;
  li.onclick=()=>{list.hidden=true;b.textContent=o};list.append(li);}});</script>`);
+// Keka-style: gender select, date of birth, joining time in days, and a tag box for skills.
+await run('keka',`
+<label for=k1>Gender *</label><select id=k1><option value=''>Select an option</option><option>Male</option><option>Female</option></select>
+<label for=k2>Date of Birth</label><input id=k2 placeholder="DD/MM/YYYY">
+<label for=k3>Available To Join (in days)</label><input id=k3 type=number>
+<label for=k4>Skills</label><div id=tags></div><input id=k4 placeholder="Add new skill">
+<script>const k4=document.getElementById('k4');k4.addEventListener('keydown',e=>{if(e.key==='Enter'&&k4.value){
+ const t=document.createElement('input');t.name='tag';t.value=k4.value;t.disabled=true;document.getElementById('tags').append(t);k4.value='';}});
+k4.addEventListener('blur',()=>{k4.value=''});</script>`);
 await browser.close();})();

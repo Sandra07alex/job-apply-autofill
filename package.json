@@ -4,7 +4,7 @@
   "private": true,
   "description": "Chrome extension that fills job applications from one saved profile.",
   "scripts": {
-    "test": "node tests/fill.test.js"
+    "test": "node tests/fill.test.js && node tests/resume.test.js"
   },
   "devDependencies": {
     "playwright": "^1.48.0"

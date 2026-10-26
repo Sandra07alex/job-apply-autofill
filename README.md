@@ -11,6 +11,9 @@ Applying to jobs means entering identical information dozens of times across dif
 ## Features
 
 - **One profile:** personal details, job preferences, multiple education entries and multiple work experience / internship entries
+- **Paste your resume** on the profile page to fill it in automatically (parsed locally, nothing uploaded)
+- **Saved answers** for screening questions ("former employee of…" → No), reused on every site
+- **Workday pickers:** opens "Select One" lists and picks from School / Skills search suggestions
 - **One click or one shortcut** (`Alt+Shift+F`) to fill the current page
 - **Repeated sections:** fills Experience 1, Experience 2, Education 1 and so on with the right entry
 - **Works with React/Angular forms** (e.g. Workday) by firing the input events those frameworks listen for
@@ -42,10 +45,12 @@ extension/
   manifest.json   Chrome extension config (Manifest V3)
   popup.html/js   The toolbar popup (Fill button, overwrite toggle)
   options.html/js The profile editor page
+  resume.js       Turns pasted resume text into a profile
   fill.js         The core: reads each form field, decides what it's asking for, fills it
   background.js   Keyboard shortcut handler
 tests/
-  fill.test.js    Runs fill.js against mock LinkedIn and Workday forms in headless Chromium
+  fill.test.js    Runs fill.js against mock LinkedIn, Workday and Keka forms in headless Chromium
+  resume.test.js  Checks the resume parser on sample resumes
 ```
 
 ### How `fill.js` works
@@ -65,14 +70,15 @@ npm test
 
 ## Known limitations
 
-- **Custom dropdowns** (Workday's button-style pickers for Degree, Country, etc.) aren't native `<select>` elements, so they're highlighted for you to pick manually.
+- **Resume parsing** is rule-based, so unusual layouts (tables, two columns) may come out partly wrong; always review before saving.
 - **Open-ended questions** ("Why do you want to work here?") are left blank.
 - **Skill-specific questions** ("Years of experience with Python?") are deliberately left blank rather than guessed.
 - **Doesn't click "Add"** buttons for extra experience/education blocks.
 
 ## Roadmap
 
-- [ ] Handle Workday custom dropdowns (open the listbox, pick the matching option)
+- [x] Handle Workday custom dropdowns (open the listbox, pick the matching option)
+- [x] Fill the profile by pasting resume text
 - [ ] Auto-click "Add" for each extra experience / education entry
 - [x] Saved answers for common screening questions, reused across sites
 - [ ] Optional AI drafts for open-ended questions using the job description, shown for review before inserting

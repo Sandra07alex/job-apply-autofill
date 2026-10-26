@@ -62,7 +62,9 @@
     if (t(/country\s*(phone\s*)?code|dial(ling)?\s*code|phone.*(country|code)|\bisd\b/)) return { key: "phoneCountryCode" };
     if (t(/extension|\bext\b|device\s*type|phone\s*type/)) return null;
     if (t(/phone|mobile|contact\s*number|\bcell/)) return { key: "phone" };
-    if (t(/notice/)) return { key: "noticePeriod" };
+    if (t(/notice|available\s*to\s*join|joining\s*(time|period)|can\s*(you\s*)?join/)) return { key: "noticePeriod" };
+    if (t(/date\s*of\s*birth|birth\s*date|\bdob\b/)) return { key: "dateOfBirth" };
+    if (t(/gender|\bsex\b/)) return { key: "gender" };
     if (t(/expected.*(ctc|salary|compensation|pay)|desired\s*(salary|pay)|salary\s*expectation/)) return { key: "expectedCtc" };
     if (t(/current.*(ctc|salary|compensation)/)) return { key: "currentCtc" };
     // Skill-specific questions ("years of experience with Python") are left for you.
@@ -268,6 +270,37 @@
     return false;
   }
 
+  // Tag boxes ("Add new skill") take one item per Enter and often clear leftover
+  // text on blur. If the first Enter isn't taken, it's a plain box: type the list.
+  async function fillTags(el, list) {
+    const items = list.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 15);
+    for (const [i, s] of items.entries()) {
+      setText(el, s, true);
+      key(el, "Enter");
+      await sleep(150);
+      if (i === 0 && el.value === s) { setText(el, items.join(", ")); return true; }
+    }
+    el.blur();
+    return items.length > 0;
+  }
+
+  // "Immediate" -> 0, "30 days" -> 30, "2 months" -> 60, for "(in days)" fields.
+  function toDays(s) {
+    const t = String(s).toLowerCase(), n = parseFloat(t);
+    if (/immediate/.test(t)) return "0";
+    if (isNaN(n)) return s;
+    return String(Math.round(/month/.test(t) ? n * 30 : /week/.test(t) ? n * 7 : n));
+  }
+
+  // Profile stores YYYY-MM-DD; text boxes get it in their placeholder's order (default DD/MM/YYYY).
+  function formatDate(iso, el) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    if (!m || el.type === "date") return iso;
+    const ph = (el.placeholder || "").toLowerCase();
+    const fmt = /dd/.test(ph) && /mm/.test(ph) && /yyyy/.test(ph) ? ph : "dd/mm/yyyy";
+    return fmt.replace("yyyy", m[1]).replace("mm", m[2]).replace("dd", m[3]);
+  }
+
   function hasValueOf(el) {
     if (el.type === "checkbox") return false;
     if (el.tagName === "SELECT") return el.selectedIndex > 0 && !!el.value;
@@ -351,7 +384,9 @@
           if (entry) value = dateValue(entry, c.key, el);
         }
       } else if (el.type !== "checkbox") {
-        const v = saved || personalValue(c.key);
+        let v = saved || personalValue(c.key);
+        if (v && !saved && c.key === "noticePeriod" && (el.type === "number" || /\bdays?\b/.test(d))) v = toDays(v);
+        if (v && !saved && c.key === "dateOfBirth") v = formatDate(v, el);
         if (v) value = { text: v };
       }
     }
@@ -370,6 +405,7 @@
           if (await fillPrompt(el, [s])) ok = true;
         }
       } else if (isPrompt(el)) ok = await fillPrompt(el, cands);
+      else if (c.key === "skills" && el.tagName === "INPUT") ok = await fillTags(el, value.text);
       else { setText(el, value.text); ok = true; }
       mark(el, ok);
       ok ? filled++ : unmatched++;

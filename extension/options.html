@@ -24,6 +24,9 @@
   button.danger { color: #dc2626; }
   .bar { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid var(--b); padding: 12px 16px; display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap; }
   #saved { color: #16a34a; font-size: 13px; min-width: 60px; }
+  #resumeText { width: 100%; box-sizing: border-box; min-height: 120px; }
+  .row { display: flex; gap: 12px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+  #parsed { font-size: 13px; color: #16a34a; }
 </style>
 </head>
 <body>
@@ -31,6 +34,11 @@
   <h1>My Job Profile</h1>
   <p class="sub">Fill this once. Everything stays in your browser; nothing is sent anywhere.</p>
 
+  <section><h2>Quick start: paste your resume</h2>
+    <p class="sub">Open your resume, select all (Ctrl+A), copy and paste it here. Read in your browser only; check the result below before saving.</p>
+    <textarea id="resumeText" placeholder="Paste your resume text here"></textarea>
+    <div class="row"><button class="primary" id="parseResume">Fill my profile from this</button><span id="parsed"></span></div>
+  </section>
   <section><h2>Personal details</h2><div class="grid" id="personal"></div></section>
   <section><h2>Job preferences</h2><div class="grid" id="job"></div></section>
   <section><h2>Education <button id="addEdu">+ Add education</button></h2><div id="education"></div></section>
@@ -46,6 +54,7 @@
   <button id="importBtn">Import backup</button>
   <input type="file" id="importFile" accept=".json" hidden>
 </div>
+<script src="resume.js"></script>
 <script src="options.js"></script>
 </body>
 </html>

@@ -1,5 +1,6 @@
 const PERSONAL = [
   ["firstName", "First name"], ["lastName", "Last name"],
+  ["gender", "Gender", "gender"], ["dateOfBirth", "Date of birth", "date"],
   ["email", "Email"], ["phone", "Phone (without country code)"],
   ["phoneCountryCode", "Phone country code (e.g. +91)"],
   ["addressLine1", "Address line 1", "wide"],
@@ -31,15 +32,16 @@ const ANS = [
   ["q", "If the question contains… (e.g. former employee of Ernst)", "wide"],
   ["a", "Answer (e.g. No)"],
 ];
+const GENDERS = ["", "Female", "Male", "Non-binary", "Prefer not to say"];
 const MONTHS = ["", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
 const MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function field([key, label, kind], value, prefix) {
   const wrap = document.createElement("label");
   let input;
-  if (kind === "yesno" || kind === "month") {
+  if (kind === "yesno" || kind === "month" || kind === "gender") {
     input = document.createElement("select");
-    const opts = kind === "yesno" ? ["", "Yes", "No"] : MONTHS;
+    const opts = kind === "yesno" ? ["", "Yes", "No"] : kind === "gender" ? GENDERS : MONTHS;
     opts.forEach((v, i) => {
       const o = document.createElement("option");
       o.value = v;
@@ -58,6 +60,7 @@ function field([key, label, kind], value, prefix) {
     input.value = value || "";
   } else {
     input = document.createElement("input");
+    if (kind === "date") input.type = "date";
     input.value = value || "";
   }
   if (kind === "wide") wrap.classList.add("wide");
@@ -135,6 +138,37 @@ document.getElementById("save").onclick = () => {
     s.textContent = "Saved \u2713";
     setTimeout(() => (s.textContent = ""), 2000);
   });
+};
+
+// Resume text -> profile. Fills only empty fields; asks before replacing entries.
+document.getElementById("parseResume").onclick = () => {
+  const out = document.getElementById("parsed");
+  const text = document.getElementById("resumeText").value;
+  if (!text.trim()) { out.textContent = "Paste your resume first."; return; }
+  const found = parseResume(text), cur = collect();
+  const merge = (a, b) => {
+    const m = { ...a };
+    for (const [k, v] of Object.entries(b)) if (v && !m[k]) m[k] = v;
+    return m;
+  };
+  const hasData = (e) => Object.values(e).some(Boolean);
+  const pickList = (have, got, what) => {
+    have = have.filter(hasData);
+    if (!got.length) return have;
+    if (!have.length) return got;
+    return confirm(`Replace your ${have.length} ${what} entr${have.length > 1 ? "ies" : "y"} with the ${got.length} found in the resume?`) ? got : have;
+  };
+  render({
+    personal: merge(cur.personal, found.personal),
+    job: merge(cur.job, found.job),
+    education: pickList(cur.education, found.education, "education"),
+    experience: pickList(cur.experience, found.experience, "experience"),
+    answers: cur.answers,
+  });
+  const n = Object.values(found.personal).filter(Boolean).length;
+  const skills = found.job.skills ? found.job.skills.split(",").length : 0;
+  out.textContent = `Found ${n} personal details, ${found.education.length} education, ${found.experience.length} experience, ${skills} skills. ` +
+    "Check everything below, then click Save profile.";
 };
 
 document.getElementById("export").onclick = () => {
