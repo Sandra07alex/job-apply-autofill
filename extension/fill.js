@@ -764,12 +764,23 @@
   }
 
   // ---------- Run ----------
-  await fillPass();
-  if (await addMissingEntries()) await fillPass();
-  const uploaded = await attachResume();
-  startLearning();
-  let app = null;
-  if (filled || unmatched) { app = await logApplication(); watchSubmit(app.key); }
-  return { filled, unmatched, uploaded, watching: leftForYou.size,
-    tracked: app && { company: app.company, role: app.role, status: app.status } };
+  // One fill at a time per page: a new step can trigger a fill while one is still running.
+  if (window.__autofillRunning) return { busy: true };
+  window.__autofillRunning = true;
+  let result;
+  try {
+    await fillPass();
+    if (await addMissingEntries()) await fillPass();
+    const uploaded = await attachResume();
+    startLearning();
+    let app = null;
+    if (filled || unmatched) { app = await logApplication(); watchSubmit(app.key); }
+    result = { filled, unmatched, uploaded, watching: leftForYou.size,
+      tracked: app && { company: app.company, role: app.role, status: app.status } };
+  } finally {
+    window.__autofillRunning = false;
+  }
+  // The step-by-step bar (guide.js) shows these counts and fills the next steps.
+  if (window.__autofillGuide) window.__autofillGuide.report(result);
+  return result;
 })();

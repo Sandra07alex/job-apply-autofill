@@ -20,6 +20,7 @@ Applying to jobs means entering identical information dozens of times across dif
 - **Email companies:** write a first email and a follow-up with placeholders ({company}, {role}, {note}…), paste a list of companies and HR emails, and open each one as a ready Gmail draft with your resume attached. You click Send. A built-in email tracker records what you sent and when, flags follow-ups after 7 days without a reply, and tracks Replied / Interview / Offer / Rejected
 - **Workday pickers:** opens "Select One" lists and picks from School / Skills search suggestions
 - **One click or one shortcut** (`Alt+Shift+F`) to fill the current page
+- **Step by step on multi-page forms:** after the first Fill, a bar on the page fills each new step by itself; **Next step** (or `Alt+Shift+N`) clicks the site's Save and Continue for you, warns about empty fields and steps the site rejects, and stops at Review. It never clicks Submit
 - **Repeated sections:** fills Experience 1, Experience 2, Education 1 and so on with the right entry
 - **Works with React/Angular forms** (e.g. Workday) by firing the input events those frameworks listen for
 - **Visual feedback:** green outline = filled, orange dashed = needs you
@@ -41,6 +42,8 @@ Applying to jobs means entering identical information dozens of times across dif
 2. Click the extension icon, then **Fill this page** (or press `Alt+Shift+F`).
 3. Fix anything outlined in orange, review everything, and submit yourself.
 
+**Multi-step forms (Workday etc.):** after Fill, use the bar at the bottom of the page: check each step, press **Next step**, and the next one fills itself. Submit yourself on the Review page.
+
 **Workday tip:** if your profile has more education or experience entries than the page shows, Fill clicks **Add** for you.
 
 ## Project structure
@@ -55,12 +58,14 @@ extension/
   gmail.js        Runs on Gmail pages; in a draft opened from "Email companies" it attaches your resume and notices Send
   resume.js       Turns pasted resume text into a profile
   fill.js         The core: reads each form field, decides what it's asking for, fills it
-  background.js   Keyboard shortcut handler
+  guide.js        The step-by-step bar for multi-page forms (next step, fills each new step)
+  background.js   Keyboard shortcuts; fills each new page of a guided application; Gmail draft lookup
 tests/
   fill.test.js    Runs fill.js against mock LinkedIn, Workday and Keka forms in headless Chromium
   resume.test.js  Checks the resume parser on sample resumes
+  guide.test.js   Walks the step-by-step bar through a mock three-step application
   gmail.test.js   Runs gmail.js against mock Gmail compose windows (each way of attaching)
-  extension.test.js Loads the real extension in Chromium and runs "Open in Gmail" end to end
+  extension.test.js Loads the real extension in Chromium: "Open in Gmail" and the step-by-step bar end to end
 ```
 
 ### How `fill.js` works
@@ -90,6 +95,7 @@ npm test
 - [x] Fill the profile by pasting resume text
 - [x] Auto-click "Add" for each extra experience / education entry
 - [x] Saved answers for common screening questions, reused across sites
+- [x] Guided multi-step apply: fill each step, one key to continue, stop at Review
 - [ ] Optional AI drafts for open-ended questions using the job description, shown for review before inserting
 - [x] Resume upload helper
 - [x] Learn answers from fields you fill in yourself

@@ -78,6 +78,42 @@ document.getElementById('clip').addEventListener('click',()=>{const i=document.c
     await plain.goto('https://mail.google.com/mail/u/0/#inbox');
     await plain.waitForTimeout(1500);
     assert.ok(!(await plain.textContent('body')).includes('Attaching'), 'plain Gmail tab must not be touched');
+    // ---------- Step-by-step bar through the background script ----------
+    // Step 1 -> step 2 is a full page load (background fills after it loads);
+    // step 2 -> Review swaps in place (the bar asks the background to fill).
+    await sw.evaluate(() => chrome.storage.local.set({
+      profile: { personal: { firstName: 'Sandra', lastName: 'Alex' }, job: {}, education: [],
+        experience: [{ title: 'Full Stack Developer Intern', company: 'Velvetek Systems', current: true }] },
+    }));
+    const pages = {
+      '/apply/1': `<h2>My Information</h2><label for=fn>First Name</label><input id=fn><label for=ln>Last Name</label><input id=ln>
+        <button onclick="location.href='/apply/2'">Next</button>`,
+      '/apply/2': `<h2 id=h>My Experience</h2><div id=s><label for=jt>Job Title</label><input id=jt><label for=co>Company</label><input id=co></div>
+        <button id=b onclick="document.getElementById('h').textContent='Review';document.getElementById('s').innerHTML='<p>Check your answers</p>';
+        this.textContent='Submit';this.onclick=()=>{window.__submitted=true}">Save and Continue</button>`,
+    };
+    const job = await ctx.newPage();
+    await job.route('https://jobs.example.test/**', (r) => r.fulfill({ contentType: 'text/html',
+      body: '<!doctype html><body>' + (pages[new URL(r.request().url()).pathname] || 'not found') + '</body>' }));
+    await job.goto('https://jobs.example.test/apply/1');
+    const jobTab = await sw.evaluate(async () => (await chrome.tabs.query({})).find((t) => (t.url || '').includes('jobs.example.test')).id);
+    await sw.evaluate((tabId) => chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ['guide.js', 'fill.js'] }), jobTab); // = "Fill this page"
+    await job.waitForFunction(() => document.getElementById('fn').value === 'Sandra');
+    await job.locator('.next').click();
+    await job.waitForURL('**/apply/2');
+    await job.waitForFunction(() => document.getElementById('co') && document.getElementById('co').value === 'Velvetek Systems', null, { timeout: 20000 });
+    console.log('== extension: guide step 2 after a page load | job title:', await job.inputValue('#jt'));
+    await job.waitForFunction(() => !window.__autofillRunning);
+    await job.waitForTimeout(500);
+    await job.locator('.next').click();
+    await job.waitForFunction(() => {
+      const host = [...document.documentElement.children].find((e) => e.shadowRoot);
+      return host && /Review page/.test(host.shadowRoot.querySelector('.msg').textContent);
+    }, null, { timeout: 20000 });
+    const reviewNext = await job.evaluate(() => [...document.documentElement.children].find((e) => e.shadowRoot).shadowRoot.querySelector('.next').disabled);
+    console.log('== extension: guide reached Review | Next disabled:', reviewNext, '| submitted:', await job.evaluate(() => !!window.__submitted));
+    assert.deepStrictEqual([reviewNext, await job.evaluate(() => !!window.__submitted)], [true, false]);
+
     console.log('extension: all checks passed');
   } finally {
     await ctx.close();

@@ -46,7 +46,11 @@ const resume = { name: 'Sandra_Resume (20).pdf', type: 'application/pdf', data: 
       window.__outreachJob = { id: 'r1', company: 'Acme Systems', role: 'Backend Intern', email: 'hr@acme.com' };
     }, resume);
     page.evaluate(src);
-    await page.waitForFunction(() => /click Send|download it here/.test(document.body.innerText), null, { timeout: 60000 });
+    await page.waitForFunction(() => /click Send|download it here/.test(document.body.innerText), null, { timeout: 60000 })
+      .catch(async (e) => {
+        console.log(`  (${mode}) timed out. Page text:`, JSON.stringify((await page.textContent('body')).slice(-300)), '| log:', logs.join('; '));
+        throw e;
+      });
     const chips = await page.$$eval('#chips > div', (d) => d.length);
     const fallback = await page.$eval('a[download]', (a) => a.download).catch(() => '');
     console.log(`== gmail attach (${mode}) | attachments: ${chips} | ${logs.join('; ')}${fallback ? ' | offered download: ' + fallback : ''}`);

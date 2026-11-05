@@ -18,6 +18,10 @@
     "fill-page": {
       "suggested_key": { "default": "Alt+Shift+F" },
       "description": "Fill the application on this page"
+    },
+    "next-step": {
+      "suggested_key": { "default": "Alt+Shift+N" },
+      "description": "Go to the next step of the application (never submits)"
     }
   }
 }

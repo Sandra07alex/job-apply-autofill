@@ -20,7 +20,7 @@ document.getElementById("fill").addEventListener("click", async () => {
   try {
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id, allFrames: true },
-      files: ["fill.js"],
+      files: ["guide.js", "fill.js"], // guide.js: the step-by-step bar
     });
     let filled = 0, needs = 0, uploaded = 0, watching = 0, err = null, tracked = null;
     for (const r of results) {
