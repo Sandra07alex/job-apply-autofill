@@ -3,17 +3,14 @@ const DEFAULT_TEMPLATES = {
     subject: "Application for {role} – {fullName}",
     body: `Dear {hrName},
 
-I am writing to apply for {position} at {company}.
-I am {education}.
-I am currently working as a {currentTitle} at {currentCompany}.
+I am writing to apply for {position} at {company}. I am a 2026 B.Tech graduate in Computer Science and Design from Government Engineering College Kozhikode (CGPA 8.66/10), currently working as a Full Stack Developer at Velvetek Systems, where I build features for a Manufacturing Execution System (MES) SaaS platform.
 
 During college I built 15+ projects, from full-stack web platforms to computer vision and deep learning models. Each one meant learning a new tool or technology, so I pick things up quickly and put them to work.
 
 I am excited about {company} because {note}
 I would be glad to grow with your team and contribute from day one.
 
-I have attached my resume.
-You can also see my work at {workLinks}.
+I have attached my resume. You can also see my work at sandraalex.site and github.com/Sandra07alex.
 
 Thank you for your time and consideration.
 
@@ -21,7 +18,7 @@ Best regards,
 {fullName}
 {phone}
 {email}
-LinkedIn: {linkedin}`,
+LinkedIn: linkedin.com/in/sandra07alex`,
   },
   followup: {
     subject: "Re: {firstSubject}",
@@ -40,8 +37,29 @@ Best regards,
 };
 // The intro line of the first default, before {position}. Saved templates still equal to it get upgraded.
 const OLD_INTRO = "My name is {fullName}, and I'm writing to apply for the {role} role at {company}.";
-// The previous first-email default. A saved template still exactly this is replaced by the new
-// default; one you've edited is left alone.
+// Earlier first-email defaults. A saved template still exactly one of these is replaced by the
+// current default; one you've edited is left alone.
+const PREVIOUS_LINE_BY_LINE_BODY = `Dear {hrName},
+
+I am writing to apply for {position} at {company}.
+I am {education}.
+I am currently working as a {currentTitle} at {currentCompany}.
+
+During college I built 15+ projects, from full-stack web platforms to computer vision and deep learning models. Each one meant learning a new tool or technology, so I pick things up quickly and put them to work.
+
+I am excited about {company} because {note}
+I would be glad to grow with your team and contribute from day one.
+
+I have attached my resume.
+You can also see my work at {workLinks}.
+
+Thank you for your time and consideration.
+
+Best regards,
+{fullName}
+{phone}
+{email}
+LinkedIn: {linkedin}`;
 const PREVIOUS_FIRST_BODY = `Dear {hrName},
 
 My name is {fullName}, and I'm writing to apply for {position} at {company}.
@@ -503,7 +521,9 @@ chrome.storage.local.get(["profile", "resume", "outreach"], (s) => {
     data = { templates: { ...structuredClone(DEFAULT_TEMPLATES), ...templates }, rows: s.outreach.rows || [] };
     // Upgrade the old intro line (dropped whenever a company had no role) if you haven't reworded it.
     data.templates.first.body = data.templates.first.body.replace(OLD_INTRO, "My name is {fullName}, and I'm writing to apply for {position} at {company}.");
-    if (data.templates.first.body.trim() === PREVIOUS_FIRST_BODY.trim()) data.templates.first = structuredClone(DEFAULT_TEMPLATES.first);
+    if ([PREVIOUS_FIRST_BODY, PREVIOUS_LINE_BY_LINE_BODY].some((b) => data.templates.first.body.trim() === b.trim())) {
+      data.templates.first = structuredClone(DEFAULT_TEMPLATES.first);
+    }
     data.templates.followup.body = data.templates.followup.body.replace("my application for the {role} role at {company}", "my application for {position} at {company}");
   }
   selected = data.rows[0] && data.rows[0].id;
