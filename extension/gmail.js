@@ -3,20 +3,36 @@
 (async () => {
   if (window.__outreachStarted) return;
   const hasChrome = typeof chrome !== "undefined" && !!chrome.storage;
-  // Tests set the job directly; in Chrome, ask the background script about this tab.
-  let job = window.__outreachJob;
-  if (!job && hasChrome) {
-    try { job = await chrome.runtime.sendMessage({ type: "outreach-job" }); } catch (_) { job = null; }
-  }
-  if (!job || window.__outreachStarted) return;
-  window.__outreachStarted = true;
-  window.__outreachJob = null;
-  console.info(`Job Apply Autofill: preparing your email to ${job.company || job.email}`);
-
   const getStore = (keys) => hasChrome ? chrome.storage.local.get(keys) : Promise.resolve(window.__AUTOFILL_TEST__ || {});
   const setStore = (v) => hasChrome ? chrome.storage.local.set(v) : Promise.resolve(Object.assign(window.__AUTOFILL_TEST__, v));
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+
+  // Which draft is this? Tests set it directly. Otherwise the "jaa" marker in the address
+  // names it; if Gmail dropped the marker, the background script knows this tab.
+  const marker = new URLSearchParams(location.search).get("jaa");
+  let job = window.__outreachJob;
+  if (!job && hasChrome && marker) job = ((await getStore(["outreachPending"])).outreachPending || {})[marker];
+  if (!job && hasChrome) {
+    try { job = await chrome.runtime.sendMessage({ type: "outreach-job" }); } catch (_) { job = null; }
+  }
+  if (job && job.at && Date.now() - job.at > 15 * 60e3) job = null; // an old draft link reopened later
+  console.info(job
+    ? `Job Apply Autofill: preparing your email to ${job.company || job.email}`
+    : `Job Apply Autofill: on Gmail (${marker ? "draft marker found but its details are gone or old" : "not a draft from Email companies"})`);
+  if (!job || window.__outreachStarted) return;
+  window.__outreachStarted = true;
+  window.__outreachJob = null;
+
+  // Tell "Email companies" this draft was picked up.
+  async function updatePending(change) {
+    const s = await getStore(["outreachPending"]);
+    const pending = s.outreachPending || {};
+    if (!pending[job.id]) return;
+    if (change) Object.assign(pending[job.id], change); else delete pending[job.id];
+    await setStore({ outreachPending: pending });
+  }
+  await updatePending({ ack: true });
 
   // One message box at a time; `link` adds e.g. a "Download resume" link.
   let current = null;
@@ -137,6 +153,7 @@
   async function markSent() {
     if (done) return;
     done = true;
+    await updatePending(null); // sent: reopening this draft link later shouldn't attach again
     const s = await getStore(["outreach", "applications"]);
     const outreach = s.outreach || { rows: [] };
     const row = (outreach.rows || []).find((r) => r.id === job.id);

@@ -132,13 +132,56 @@ async function openInGmail(row) {
   if (!EMAIL_RE.test(row.email || "")) { alert(`Check the email address for ${row.company || "this company"}.`); return; }
   const mail = emailFor(row);
   if (mail.kind === "followup" && !confirm(`Open a follow-up email to ${row.company || row.email}?`)) return;
-  const tab = await chrome.tabs.create({ url: gmailUrl(mail) });
-  // The background script attaches the resume once Gmail has loaded in this tab.
-  await chrome.storage.session.set({ ["outreach-" + tab.id]: {
-    id: row.id, company: row.company, role: row.role, email: row.email, kind: mail.kind, subject: mail.subject, body: mail.body, at: Date.now() } });
+  const job = { id: row.id, company: row.company, role: row.role, email: row.email, kind: mail.kind,
+    subject: mail.subject, body: mail.body, at: Date.now() };
+  // gmail.js finds this draft by the "jaa" marker in the Gmail address, or failing
+  // that by asking the background script about its tab.
+  const pending = (await chrome.storage.local.get("outreachPending")).outreachPending || {};
+  pending[row.id] = job;
+  await chrome.storage.local.set({ outreachPending: pending });
+  const tab = await chrome.tabs.create({ url: gmailUrl(mail) + "&jaa=" + encodeURIComponent(row.id) });
+  await chrome.storage.session.set({ ["outreach-" + tab.id]: job });
   if (row.status === "new") row.status = "opened";
   save();
   renderAll();
+  hideNotice();
+  // gmail.js marks the draft as picked up; if it never does, say so here.
+  setTimeout(async () => {
+    const p = ((await chrome.storage.local.get("outreachPending")).outreachPending || {})[row.id];
+    if (p && p.at === job.at && !p.ack) {
+      showNotice(`The Gmail tab for ${row.company || row.email} didn't respond, so your resume wasn't attached. ` +
+        "Check that the extension may run on Gmail (button below, or Extension details → Site access), reload the Gmail tab, " +
+        "or attach the resume yourself with the 📎 in Gmail.", "Allow Gmail access", requestGmailAccess);
+    }
+  }, 30000);
+}
+
+// ---------- Gmail access ----------
+const GMAIL = { origins: ["https://mail.google.com/*"] };
+function showNotice(text, buttonText, onClick) {
+  const n = $("notice");
+  n.innerHTML = "";
+  n.append(el("span", { textContent: text }));
+  if (buttonText) {
+    const b = el("button", { className: "primary", textContent: buttonText });
+    b.onclick = onClick;
+    n.append(" ", b);
+  }
+  n.hidden = false;
+}
+function hideNotice() { $("notice").hidden = true; }
+function requestGmailAccess() {
+  chrome.permissions.request(GMAIL, (granted) => {
+    if (chrome.runtime.lastError) console.warn(chrome.runtime.lastError.message);
+    if (granted) showNotice("Gmail access is on. Close the Gmail draft and click Open in Gmail again.");
+  });
+}
+// Chrome's "Site access" setting can stop the extension from running on Gmail.
+function checkGmailAccess() {
+  chrome.permissions.contains(GMAIL, (ok) => {
+    if (!ok) showNotice("Chrome isn't letting this extension run on Gmail, so it can't attach your resume there.",
+      "Allow Gmail access", requestGmailAccess);
+  });
 }
 
 // ---------- Companies list ----------
@@ -423,4 +466,5 @@ chrome.storage.local.get(["profile", "resume", "outreach"], (s) => {
   renderTemplate();
   renderResumeLine();
   renderAll();
+  checkGmailAccess();
 });

@@ -53,11 +53,16 @@ document.getElementById('clip').addEventListener('click',()=>{const i=document.c
     await page.evaluate((tid) => { chrome.tabs.create = async ({ url }) => { window.__opened(url); return { id: tid }; }; }, tabId);
     await page.click('#rows tr:first-child .acts button.primary');
     await page.waitForTimeout(300);
+    assert.match(opened, /&jaa=t$/);
+    // Drop the tab-id link so the draft must be found by the "jaa" marker in the address alone.
+    await sw.evaluate(() => chrome.storage.session.clear());
     await gmail.goto(opened);
     await gmail.waitForFunction(() => document.body && /Attached|Couldn't attach/.test(document.body.innerText), null, { timeout: 60000 });
     const chips = await gmail.textContent('#chips');
     console.log('== extension: gmail url', new URL(gmail.url()).pathname, '| attachments:', JSON.stringify(chips));
     assert.match(chips, /Sandra_Resume \(20\)\.pdf/);
+    const ack = await sw.evaluate(async () => (await chrome.storage.local.get('outreachPending')).outreachPending.t.ack);
+    assert.strictEqual(ack, true, 'Gmail tab confirms it picked up the draft');
 
     await gmail.click('[data-tooltip^="Send"]');
     await gmail.waitForTimeout(500);
@@ -65,6 +70,8 @@ document.getElementById('clip').addEventListener('click',()=>{const i=document.c
     const row = s.outreach.rows[0];
     console.log('== extension: after Send | status:', row.status, '| history:', row.history.length, '| tracker:', (s.applications || []).length);
     assert.deepStrictEqual([row.status, row.history.length, s.applications.length], ['sent', 1, 1]);
+    const left = await sw.evaluate(async () => (await chrome.storage.local.get('outreachPending')).outreachPending);
+    assert.deepStrictEqual(left, {}, 'sent drafts are cleared so reopening the link does nothing');
 
     // An ordinary Gmail tab (not opened from Email companies) is left alone.
     const plain = await ctx.newPage();
