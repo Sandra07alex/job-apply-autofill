@@ -14,19 +14,15 @@ chrome.commands.onCommand.addListener(async (command) => {
 });
 
 // "Email companies" opens Gmail in a new tab and notes the tab id in session storage.
-// Once Gmail has loaded there, hand the company details to gmail.js to attach the resume.
-// Gmail can reload itself while opening, so keep trying for 2 minutes (gmail.js runs once per page).
-chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
-  if (info.status !== "complete" || !tab.url || !tab.url.startsWith("https://mail.google.com/")) return;
-  const key = "outreach-" + tabId;
-  const job = (await chrome.storage.session.get(key))[key];
-  if (!job) return;
-  if (Date.now() - (job.at || 0) > 120000) { await chrome.storage.session.remove(key); return; }
-  try {
-    await chrome.scripting.executeScript({ target: { tabId }, func: (j) => { window.__outreachJob = j; }, args: [job] });
-    await chrome.scripting.executeScript({ target: { tabId }, files: ["gmail.js"] });
-  } catch (e) {
-    console.warn("Could not prepare the Gmail tab:", e);
-  }
+// gmail.js runs on every Gmail page and asks here whether its tab was opened that way.
+// The answer stays valid for 2 minutes, in case Gmail reloads itself while opening.
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || msg.type !== "outreach-job" || !sender.tab) return;
+  const key = "outreach-" + sender.tab.id;
+  chrome.storage.session.get(key).then((s) => {
+    const job = s[key];
+    sendResponse(job && Date.now() - (job.at || 0) < 120000 ? job : null);
+  });
+  return true; // answering asynchronously
 });
 chrome.tabs.onRemoved.addListener((tabId) => chrome.storage.session.remove("outreach-" + tabId));

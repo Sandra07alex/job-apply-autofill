@@ -52,14 +52,15 @@ extension/
   options.html/js The profile editor page
   tracker.html/js The "My applications" tracker page
   outreach.html/js The "Email companies" page (template, company list, preview)
-  gmail.js        Runs in the Gmail draft: attaches your resume, notices Send
+  gmail.js        Runs on Gmail pages; in a draft opened from "Email companies" it attaches your resume and notices Send
   resume.js       Turns pasted resume text into a profile
   fill.js         The core: reads each form field, decides what it's asking for, fills it
   background.js   Keyboard shortcut handler
 tests/
   fill.test.js    Runs fill.js against mock LinkedIn, Workday and Keka forms in headless Chromium
   resume.test.js  Checks the resume parser on sample resumes
-  gmail.test.js   Runs gmail.js against mock Gmail compose windows
+  gmail.test.js   Runs gmail.js against mock Gmail compose windows (each way of attaching)
+  extension.test.js Loads the real extension in Chromium and runs "Open in Gmail" end to end
 ```
 
 ### How `fill.js` works

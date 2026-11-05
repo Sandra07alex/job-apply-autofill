@@ -1,12 +1,18 @@
-// Injected into a Gmail compose tab opened from "Email companies".
-// Attaches your saved resume, then marks the company as emailed when you click Send.
+// Runs on every Gmail page. Only does something in a tab opened from "Email companies":
+// attaches your saved resume, then marks the company as emailed when you click Send.
 (async () => {
-  const job = window.__outreachJob;
+  if (window.__outreachStarted) return;
+  const hasChrome = typeof chrome !== "undefined" && !!chrome.storage;
+  // Tests set the job directly; in Chrome, ask the background script about this tab.
+  let job = window.__outreachJob;
+  if (!job && hasChrome) {
+    try { job = await chrome.runtime.sendMessage({ type: "outreach-job" }); } catch (_) { job = null; }
+  }
   if (!job || window.__outreachStarted) return;
   window.__outreachStarted = true;
   window.__outreachJob = null;
+  console.info(`Job Apply Autofill: preparing your email to ${job.company || job.email}`);
 
-  const hasChrome = typeof chrome !== "undefined" && !!chrome.storage;
   const getStore = (keys) => hasChrome ? chrome.storage.local.get(keys) : Promise.resolve(window.__AUTOFILL_TEST__ || {});
   const setStore = (v) => hasChrome ? chrome.storage.local.set(v) : Promise.resolve(Object.assign(window.__AUTOFILL_TEST__, v));
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

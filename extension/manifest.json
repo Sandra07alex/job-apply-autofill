@@ -11,6 +11,9 @@
   },
   "options_page": "options.html",
   "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    { "matches": ["https://mail.google.com/*"], "js": ["gmail.js"], "run_at": "document_idle" }
+  ],
   "commands": {
     "fill-page": {
       "suggested_key": { "default": "Alt+Shift+F" },
