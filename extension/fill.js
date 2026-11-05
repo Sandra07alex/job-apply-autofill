@@ -720,16 +720,18 @@
     return "";
   }
 
-  async function logApplication() {
+  // status: "In progress" when filling, "To apply" when you save a job for later.
+  async function logApplication(status = "In progress") {
     const key = jobKey();
     const apps = (await getStore(["applications"])).applications || [];
     let app = apps.find((a) => a.key === key);
     if (app) {
       app.updated = today();
+      if (app.status === "To apply" && status === "In progress") app.status = "In progress"; // started applying
     } else {
       const company = guessCompany();
       app = { id: Date.now().toString(36), key, url: location.href, company, role: guessRole(company),
-        status: "In progress", created: today(), updated: today(), appliedOn: "", notes: "" };
+        status, created: today(), updated: today(), appliedOn: "", notes: "" };
       apps.push(app);
     }
     await setStore({ applications: apps });
@@ -764,6 +766,13 @@
   }
 
   // ---------- Run ----------
+  // "Save job" in the popup: only add this job to the tracker as "To apply".
+  if (window.__AUTOFILL_SAVE_ONLY__) {
+    window.__AUTOFILL_SAVE_ONLY__ = false;
+    const app = await logApplication("To apply");
+    return { saved: { company: app.company, role: app.role, status: app.status } };
+  }
+
   // One fill at a time per page: a new step can trigger a fill while one is still running.
   if (window.__autofillRunning) return { busy: true };
   window.__autofillRunning = true;

@@ -1,5 +1,5 @@
-const STATUSES = ["In progress", "Applied", "Interview", "Offer", "Rejected", "Withdrawn"];
-const STATUS_COLORS = { "In progress": "#6b7280", Applied: "#2563eb", Interview: "#7c3aed", Offer: "#16a34a", Rejected: "#dc2626", Withdrawn: "#9ca3af" };
+const STATUSES = ["To apply", "In progress", "Applied", "Interview", "Offer", "Rejected", "Withdrawn"];
+const STATUS_COLORS = { "To apply": "#d97706", "In progress": "#6b7280", Applied: "#2563eb", Interview: "#7c3aed", Offer: "#16a34a", Rejected: "#dc2626", Withdrawn: "#9ca3af" };
 const FOLLOW_UP_DAYS = 10;
 
 let apps = [];

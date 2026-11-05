@@ -16,6 +16,8 @@ Applying to jobs means entering identical information dozens of times across dif
 - **Learns from you:** answer a field it couldn't, and it saves that answer for next time (with Undo). Consents and open questions are never learned
 - **Resume upload:** attaches your saved resume to "Resume / CV" upload boxes
 - **Adds blocks:** clicks "Add" until there's an education / experience block for every profile entry
+- **Find jobs:** enter your roles, locations, level and "posted within", and get ready-made searches for LinkedIn, Naukri, Indeed, Foundit and Google Jobs, plus Google searches of company career sites (Workday, Greenhouse, Lever, Keka, Darwinbox…), startup boards, Kerala IT parks and "we're hiring" posts. Open them all in one click
+- **Save job for later:** saves the job you're looking at to My applications as "To apply"; it moves to In progress when you Fill it
 - **Application tracker:** every job you fill is logged (company, role, link, date) and marked Applied when you submit. Track interviews, offers and rejections, get "Follow up" reminders after 10 quiet days, and export to CSV
 - **Email companies:** write a first email and a follow-up with placeholders ({company}, {role}, {note}…), paste a list of companies and HR emails, and open each one as a ready Gmail draft with your resume attached. You click Send. A built-in email tracker records what you sent and when, flags follow-ups after 7 days without a reply, and tracks Replied / Interview / Offer / Rejected
 - **Workday pickers:** opens "Select One" lists and picks from School / Skills search suggestions
@@ -54,6 +56,7 @@ extension/
   popup.html/js   The toolbar popup (Fill button, overwrite toggle)
   options.html/js The profile editor page
   tracker.html/js The "My applications" tracker page
+  findjobs.html/js The "Find jobs" page (search links across job boards and career sites)
   outreach.html/js The "Email companies" page (template, company list, preview)
   gmail.js        Runs on Gmail pages; in a draft opened from "Email companies" it attaches your resume and notices Send
   resume.js       Turns pasted resume text into a profile
@@ -96,6 +99,7 @@ npm test
 - [x] Auto-click "Add" for each extra experience / education entry
 - [x] Saved answers for common screening questions, reused across sites
 - [x] Guided multi-step apply: fill each step, one key to continue, stop at Review
+- [x] Job discovery: search links across boards and career sites, save jobs to a "To apply" list
 - [ ] Optional AI drafts for open-ended questions using the job description, shown for review before inserting
 - [x] Resume upload helper
 - [x] Learn answers from fields you fill in yourself

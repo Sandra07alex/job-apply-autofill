@@ -13,6 +13,22 @@ overwriteEl.addEventListener("change", () => {
 document.getElementById("edit").addEventListener("click", () => chrome.runtime.openOptionsPage());
 document.getElementById("apps").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("tracker.html") }));
 document.getElementById("mail").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("outreach.html") }));
+document.getElementById("find").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("findjobs.html") }));
+
+// Save the job on this page to My applications as "To apply" (nothing is filled).
+document.getElementById("save").addEventListener("click", async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  try {
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => { window.__AUTOFILL_SAVE_ONLY__ = true; } });
+    const [r] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["fill.js"] });
+    const res = r && r.result;
+    if (!res || res.error) { statusEl.textContent = (res && res.error) || "Couldn't save this job."; return; }
+    statusEl.textContent = `Saved: ${[res.saved.role, res.saved.company].filter(Boolean).join(" at ") || "this job"} ` +
+      `(${res.saved.status}). Find it in My applications; you can fix the name there.`;
+  } catch (e) {
+    statusEl.textContent = "Can't run on this page (Chrome blocks extensions on some pages).";
+  }
+});
 
 document.getElementById("fill").addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

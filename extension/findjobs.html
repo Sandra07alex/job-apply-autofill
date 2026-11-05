@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Find Jobs</title>
+<style>
+  :root { --b: #e5e7eb; --t: #1f2937; --m: #6b7280; --a: #2563eb; }
+  body { font-family: system-ui, sans-serif; color: var(--t); background: #f9fafb; margin: 0; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  h3 { font-size: 13px; color: var(--m); text-transform: uppercase; letter-spacing: .04em; margin: 14px 0 6px; }
+  p.sub { color: var(--m); margin: 0 0 16px; font-size: 14px; }
+  .hint { color: var(--m); font-size: 12px; line-height: 1.5; margin: 4px 0 0; }
+  section { background: #fff; border: 1px solid var(--b); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  label { display: flex; flex-direction: column; font-size: 12px; color: var(--m); gap: 4px; }
+  label.wide { grid-column: 1 / -1; }
+  input, select { font: inherit; font-size: 14px; color: var(--t); padding: 8px; border: 1px solid var(--b); border-radius: 8px; }
+  button { font: inherit; font-size: 13px; border: 1px solid var(--b); background: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button.primary { background: var(--a); color: #fff; border-color: var(--a); font-weight: 600; }
+  .links { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; }
+  a.src { display: block; border: 1px solid var(--b); border-radius: 10px; padding: 10px 12px; text-decoration: none; color: var(--t); background: #fff; }
+  a.src:hover { border-color: var(--a); }
+  a.src b { display: block; font-size: 14px; margin-bottom: 2px; }
+  a.src span { font-size: 12px; color: var(--m); line-height: 1.4; }
+  a.src.quiet b::after { content: "less crowded"; font-size: 10px; font-weight: 600; color: #166534; background: #dcfce7; border-radius: 999px; padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
+  .tip { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; border-radius: 10px; padding: 12px 14px; font-size: 13px; line-height: 1.6; }
+  .tip ol { margin: 4px 0 0; padding-left: 20px; }
+  .empty { color: var(--m); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Find jobs</h1>
+  <p class="sub">Ready-made searches across job boards and company career sites. Each one opens in a new tab; nothing is scraped or sent anywhere.</p>
+
+  <section>
+    <h2>What you're looking for</h2>
+    <div class="grid">
+      <label class="wide">Roles (comma separated)<input id="roles" placeholder="Software Engineer, Full Stack Developer, Backend Developer"></label>
+      <label class="wide">Locations (comma separated; "Remote" works too)<input id="locations" placeholder="Kochi, Bangalore, Remote"></label>
+      <label>Experience
+        <select id="level"><option value="fresher">Fresher / entry level (0–2 years)</option><option value="any">Any</option></select></label>
+      <label>Posted within
+        <select id="age"><option value="1">Past 24 hours</option><option value="7">Past week</option><option value="30">Past month</option></select></label>
+    </div>
+    <p class="hint">Saved automatically. Up to 3 roles go into each search.</p>
+  </section>
+
+  <div id="results"></div>
+
+  <section class="tip">
+    <b>A routine that finds more openings</b>
+    <ol>
+      <li>Every morning, set <b>Past 24 hours</b> and open the searches. Applying in the first day or two gets you seen far more often.</li>
+      <li>Open the <b>company career site</b> searches too: the same jobs often aren't on LinkedIn, and fewer people apply.</li>
+      <li>On a job you like, click the extension and <b>Save job</b>. It goes into <b>My applications → To apply</b>, so nothing gets lost.</li>
+      <li>Set up job alerts on LinkedIn and Naukri with the same roles, so new jobs come to you.</li>
+    </ol>
+  </section>
+</main>
+<script src="findjobs.js"></script>
+</body>
+</html>

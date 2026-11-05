@@ -152,6 +152,23 @@ loc.addEventListener('input',()=>setTimeout(()=>{ul.innerHTML='';for(const o of 
   console.log('   entries after step 2',afterStep2);
   console.log('   after submit      ',after.status,after.appliedOn?'(dated)':'(no date)');
   await page.close();
+  // "Save job for later" on the posting, then Fill on its /apply page: one entry, To apply -> In progress.
+  {
+    const pg=await browser.newPage();
+    await pg.route('https://jobs.lever.co/**',r=>r.fulfill({contentType:'text/html',body:'<title>Acme - Backend Intern</title><h1>Backend Intern</h1><label for=fn>First name</label><input id=fn>'}));
+    await pg.goto('https://jobs.lever.co/acme/1234');
+    await pg.evaluate(p=>{window.__AUTOFILL_TEST__={profile:p};window.__AUTOFILL_SAVE_ONLY__=true},profile);
+    const saved=(await pg.evaluate(src)).saved;
+    const untouched=await pg.inputValue('#fn');
+    await pg.goto('https://jobs.lever.co/acme/1234/apply');
+    await pg.evaluate(p=>{window.__AUTOFILL_TEST__=Object.assign(window.__AUTOFILL_TEST__||{}, {profile:p})},profile);
+    // Carry the tracker over, as chrome.storage would.
+    await pg.evaluate(a=>{window.__AUTOFILL_TEST__.applications=a},[{...saved,key:'jobs.lever.co/acme/1234',id:'x'}]);
+    await pg.evaluate(src);
+    const apps=await pg.evaluate(()=>window.__AUTOFILL_TEST__.applications);
+    console.log('   saved job          ',JSON.stringify(saved),'| field left empty:',untouched==='','| after Fill:',apps.length,'entry,',apps[0].status);
+    await pg.close();
+  }
   for (const [url,title,body] of [
     ['https://intel.wd1.myworkdayjobs.com/en-US/External/job/India%2C-Bangalore/AI-System-Performance-Engineer_JR0288211/apply/applyManually','Careers','<h2 data-automation-id="jobPostingHeader">AI System Performance Engineer</h2>'],
     ['https://infilect.keka.com/careers/applyjob/142740?source=linkedin','Full Stack Development Intern | Infilect','']]) {
