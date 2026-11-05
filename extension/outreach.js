@@ -335,6 +335,60 @@ function cell(row, key, placeholder) {
   return el("td", { className: key }, input);
 }
 
+// ---------- Suggested personal notes, from the company's own website ----------
+// The site comes from the HR email's domain (hr@algominds.live -> algominds.live). The
+// suggestion is built from the site's title and description; you review it before sending.
+const FREE_MAIL = /^(gmail|googlemail|yahoo|ymail|outlook|hotmail|live|msn|icloud|me|aol|rediffmail|proton(mail)?|gmx|yandex|mail|zohomail)\./i;
+const KEEP_CASE = new Set(["india", "indian", "kerala", "kochi", "bangalore", "bengaluru", "london", "europe", "us", "uk"]);
+
+function companySite(row) {
+  if (row.website) return row.website.replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
+  const domain = String(row.email || "").split("@")[1] || "";
+  return domain && !FREE_MAIL.test(domain) ? domain.toLowerCase() : "";
+}
+
+// "Image Recognition Powered Retail Analytics" -> "image recognition powered retail analytics";
+// acronyms (AI, IT) and place names keep their capitals.
+const softLower = (s) => s.replace(/\b([A-Z][a-z]+)\b/g, (w) => (KEEP_CASE.has(w.toLowerCase()) ? w : w.toLowerCase()));
+const FLUFF = /^(best|leading|#1|top|official site|home|welcome( to)?|the)\b\s*/i;
+
+// What the company does, in a few words, or "" if the site doesn't say anything useful.
+function whatTheyDo(title, desc, company, site) {
+  const names = [company, site.split(".")[0]].filter(Boolean).map((n) => n.toLowerCase().replace(/[^a-z0-9]/g, ""));
+  const isName = (seg) => { const n = seg.toLowerCase().replace(/[^a-z0-9]/g, ""); return !n || names.some((x) => x && (n.includes(x) || x.includes(n))); };
+  const segs = String(title || "").split(/\s+[|–—:-]\s+|\s*:\s+/).map((s) => s.trim().replace(FLUFF, "")).filter((s) => s && !isName(s));
+  const good = segs.filter((s) => { const w = s.split(/\s+/).length; return w >= 2 && w <= 10; });
+  if (good.length) return softLower(good.slice(0, 2).join(" and "));
+  // "Algominds is a London-based software engineering ... company helping ..." -> the part after "is a"
+  const m = String(desc || "").match(/\bis (?:a|an|the)\s+(.{8,140}?)\s+(?:company|provider|platform|firm|partner|leader|startup|agency)\b/i);
+  return m ? softLower(m[1].replace(FLUFF, "")) : "";
+}
+
+async function suggestNote(row, { overwrite = false } = {}) {
+  const site = companySite(row);
+  if (!site) return { ok: false, why: "no company website (personal email address); add the note yourself" };
+  let html;
+  try {
+    const r = await fetch("https://" + site, { signal: AbortSignal.timeout(15000) });
+    if (!r.ok) return { ok: false, why: `${site} answered ${r.status}` };
+    html = await r.text();
+  } catch (e) {
+    return { ok: false, why: `couldn't open ${site}` };
+  }
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const meta = (sel) => (doc.querySelector(sel) || {}).content || "";
+  const title = (doc.querySelector("title") || {}).textContent || meta("meta[property='og:title']");
+  const desc = meta("meta[name='description']") || meta("meta[property='og:description']");
+  const what = whatTheyDo(title.trim(), desc.trim(), row.company, site);
+  row.noteSource = { site, title: title.trim().slice(0, 200), desc: desc.trim().slice(0, 300) };
+  if (!what) { save(); return { ok: false, why: `${site} doesn't say clearly what they do; see its description in Message` }; }
+  // A product ("online brokerage platform ...") reads as "your ..."; a field as "your work in ...".
+  const product = /\b(platform|app|application|product|tool|marketplace|exchange|software for)\b/i.test(what);
+  if (!row.note || overwrite) row.note = product ? `of your ${what}.` : `of your work in ${what}.`;
+  save();
+  return { ok: true };
+}
+
 function rowEl(row) {
   const status = el("select", { className: "st st-" + row.status });
   for (const [v, label] of STATUSES) status.appendChild(el("option", { value: v, textContent: label, selected: row.status === v }));
@@ -359,9 +413,20 @@ function rowEl(row) {
     if (selected === row.id) selected = data.rows[0] && data.rows[0].id;
     save(); renderAll();
   };
+  const noteCell = cell(row, "note", "Why this company (optional)");
+  const suggest = el("button", { className: "suggest", textContent: "Suggest", title: "Suggest a note from the company's website" });
+  suggest.onclick = async () => {
+    select(row.id);
+    if (row.note && !confirm("Replace your note with a suggestion from the company's website?")) return;
+    suggest.disabled = true; suggest.textContent = "…";
+    const r = await suggestNote(row, { overwrite: true });
+    renderAll();
+    if (!r.ok) showNotice(`No note suggested for ${row.company || row.email}: ${r.why}.`);
+  };
+  noteCell.append(suggest);
   const tr = el("tr", {},
     cell(row, "company", "Company"), cell(row, "email", "hr@company.com"), cell(row, "role", "Role"),
-    cell(row, "hrName", "Hiring Team"), cell(row, "note", "Why this company (optional)"),
+    cell(row, "hrName", "Hiring Team"), noteCell,
     statusCell, el("td", { className: "acts" }, view, " ", open, " ", del));
   tr.dataset.id = row.id;
   tr.onclick = (e) => { if (e.target === tr || e.target.tagName === "TD") select(row.id); };
@@ -443,6 +508,13 @@ function renderMessage() {
     const mail = emailFor(row);
     box.appendChild(mailBox(mail.kind === "first" ? "Will send" : "Follow-up (will send)", mail,
       mail.kind === "followup" && !followUpDue(row) ? `Best sent after ${FOLLOW_UP_DAYS} days without a reply` : ""));
+    // Where a suggested note came from, so you can check it's right.
+    if (row.noteSource && mail.kind === "first") {
+      const s = row.noteSource;
+      box.appendChild(el("p", { className: "source" },
+        el("b", { textContent: `What ${s.site} says about itself: ` }), [s.title, s.desc].filter(Boolean).join(" — "),
+        el("br"), "Check the personal note matches, and make it your own (one real detail you like beats a generic line)."));
+    }
   }
   for (const h of [...(row.history || [])].reverse()) {
     box.appendChild(mailBox("Sent", { to: row.email, subject: h.subject, body: h.body },
@@ -498,6 +570,25 @@ $("resetTemplate").onclick = () => {
 };
 
 $("addRows").onclick = addRows;
+// Suggest notes for every unsent company that doesn't have one yet.
+$("suggestAll").onclick = async () => {
+  const todo = data.rows.filter((r) => (r.status === "new" || r.status === "opened") && !r.note);
+  if (!todo.length) { $("addMsg").textContent = "Every unsent company already has a note."; return; }
+  $("suggestAll").disabled = true;
+  let ok = 0;
+  const skipped = [];
+  for (const [i, row] of todo.entries()) {
+    $("addMsg").textContent = `Reading company websites: ${i + 1} of ${todo.length}…`;
+    const r = await suggestNote(row);
+    if (r.ok) ok++; else skipped.push(`${row.company || row.email} (${r.why})`);
+    renderRows();
+  }
+  $("suggestAll").disabled = false;
+  $("addMsg").textContent = `Suggested ${ok} note${ok === 1 ? "" : "s"}.` + (skipped.length ? ` None for: ${skipped.join("; ")}.` : "") +
+    " Check each one in Message before sending.";
+  renderAll();
+};
+
 $("openNext").onclick = () => {
   const next = nextToOpen();
   if (next) { select(next.id); openInGmail(next); }

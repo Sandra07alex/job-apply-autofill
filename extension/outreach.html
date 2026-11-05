@@ -34,7 +34,7 @@
   .chip.due:not(.on) { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
   #stats { margin-left: auto; font-size: 12px; color: var(--m); }
   .wrap { border: 1px solid var(--b); border-radius: 10px; overflow-x: auto; margin-top: 10px; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 980px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1100px; }
   th { text-align: left; font-weight: 600; color: var(--m); font-size: 12px; padding: 8px; border-bottom: 1px solid var(--b); }
   td { padding: 4px 6px; border-bottom: 1px solid var(--b); vertical-align: middle; }
   tr:last-child td { border-bottom: 0; }
@@ -62,6 +62,10 @@
   .mail .body { white-space: pre-wrap; font-family: inherit; font-size: 14px; line-height: 1.55; margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--b); }
   .attach { font-size: 12px; color: var(--m); margin-top: 8px; }
   #resumeLine.missing { color: #b45309; }
+  td.note { white-space: nowrap; min-width: 260px; }
+  td.note input { width: calc(100% - 74px); display: inline-block; vertical-align: middle; }
+  .suggest { font-size: 11px; padding: 3px 7px; margin-left: 4px; }
+  .source { font-size: 12px; color: #4b5563; background: #f9fafb; border: 1px dashed var(--b); border-radius: 8px; padding: 8px 10px; margin: -4px 0 12px; line-height: 1.5; }
   .notice { background: #fef3c7; border: 1px solid #fcd34d; color: #78350f; border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; font-size: 14px; line-height: 1.5; }
   .notice button { margin-left: 6px; }
   a { color: var(--a); }
@@ -84,7 +88,7 @@
   </section>
 
   <section>
-    <h2>2. Companies <button id="openNext" class="primary">Open next unsent in Gmail</button></h2>
+    <h2>2. Companies <span class="row" style="margin:0"><button id="suggestAll" title="Read each company's website (from the HR email's domain) and suggest a personal note">Suggest notes for all</button><button id="openNext" class="primary">Open next unsent in Gmail</button></span></h2>
     <p class="hint">Paste one company per line: <b>Company, HR email, Role</b> (role optional). Example: <i>Infilect, careers@infilect.com, Backend Intern</i></p>
     <textarea id="paste" placeholder="Acme Systems, hr@acme.com, Software Engineer&#10;Beta Labs, jobs@betalabs.in"></textarea>
     <div class="row">
