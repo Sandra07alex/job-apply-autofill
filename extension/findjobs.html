@@ -9,35 +9,65 @@
   body { font-family: system-ui, sans-serif; color: var(--t); background: #f9fafb; margin: 0; }
   main { max-width: 980px; margin: 0 auto; padding: 24px 16px 60px; }
   h1 { font-size: 22px; margin: 0 0 4px; }
-  h2 { font-size: 16px; margin: 0 0 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  h2 { font-size: 16px; margin: 0; }
   h3 { font-size: 13px; color: var(--m); text-transform: uppercase; letter-spacing: .04em; margin: 14px 0 6px; }
   p.sub { color: var(--m); margin: 0 0 16px; font-size: 14px; }
   .hint { color: var(--m); font-size: 12px; line-height: 1.5; margin: 4px 0 0; }
-  section { background: #fff; border: 1px solid var(--b); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  section, details { background: #fff; border: 1px solid var(--b); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  summary { cursor: pointer; font-weight: 600; font-size: 15px; }
+  details[open] summary { margin-bottom: 10px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
   label { display: flex; flex-direction: column; font-size: 12px; color: var(--m); gap: 4px; }
   label.wide { grid-column: 1 / -1; }
   input, select { font: inherit; font-size: 14px; color: var(--t); padding: 8px; border: 1px solid var(--b); border-radius: 8px; }
   button { font: inherit; font-size: 13px; border: 1px solid var(--b); background: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
   button.primary { background: var(--a); color: #fff; border-color: var(--a); font-weight: 600; }
-  .links { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .grow { flex: 1; }
+  #status { font-size: 13px; color: var(--m); }
+  progress { width: 160px; height: 8px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 10px; }
+  .chip { border-radius: 999px; padding: 4px 12px; }
+  .chip b { margin-left: 4px; }
+  .chip.on { background: var(--t); color: #fff; border-color: var(--t); }
+  #filterText { width: 100%; box-sizing: border-box; margin-bottom: 10px; }
+  .job { display: flex; gap: 12px; align-items: flex-start; padding: 12px 4px; border-top: 1px solid var(--b); }
+  .job:first-child { border-top: 0; }
+  .job .info { flex: 1; min-width: 0; }
+  .job a.title { font-weight: 600; font-size: 15px; color: var(--t); text-decoration: none; }
+  .job a.title:hover { color: var(--a); text-decoration: underline; }
+  .job .meta { font-size: 13px; color: var(--m); margin-top: 3px; }
+  .job .acts { display: flex; gap: 6px; flex-shrink: 0; }
+  .job .acts button { padding: 4px 10px; font-size: 12px; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 1px 8px; margin-left: 6px; vertical-align: 2px; }
+  .t-fresher { background: #dcfce7; color: #166534; }
+  .t-mid { background: #f3f4f6; color: #4b5563; }
+  .t-new { background: #dbeafe; color: #1e40af; }
+  .t-saved { background: #fef3c7; color: #92400e; }
+  .empty { color: var(--m); font-size: 14px; padding: 20px 4px; }
+  .companies { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .co { font-size: 12px; border: 1px solid var(--b); border-radius: 999px; padding: 2px 4px 2px 10px; display: inline-flex; align-items: center; gap: 2px; }
+  .co button { border: 0; padding: 0 6px; color: var(--m); background: none; }
+  .co.off { opacity: .45; text-decoration: line-through; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  .row input { flex: 1; min-width: 200px; }
+  .links { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
   a.src { display: block; border: 1px solid var(--b); border-radius: 10px; padding: 10px 12px; text-decoration: none; color: var(--t); background: #fff; }
   a.src:hover { border-color: var(--a); }
   a.src b { display: block; font-size: 14px; margin-bottom: 2px; }
   a.src span { font-size: 12px; color: var(--m); line-height: 1.4; }
-  a.src.quiet b::after { content: "less crowded"; font-size: 10px; font-weight: 600; color: #166534; background: #dcfce7; border-radius: 999px; padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
-  .tip { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; border-radius: 10px; padding: 12px 14px; font-size: 13px; line-height: 1.6; }
-  .tip ol { margin: 4px 0 0; padding-left: 20px; }
-  .empty { color: var(--m); font-size: 14px; }
+  .loc-head { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; }
+  @media (max-width: 600px) { .job { flex-direction: column; } }
 </style>
 </head>
 <body>
 <main>
   <h1>Find jobs</h1>
-  <p class="sub">Ready-made searches across job boards and company career sites. Each one opens in a new tab; nothing is scraped or sent anywhere.</p>
+  <p class="sub">Jobs from companies' own career sites, filtered for your roles, locations and level, in one list. Apply opens the job; Save adds it to My applications.</p>
 
   <section>
-    <h2>What you're looking for</h2>
+    <h2 style="margin-bottom:10px">What you're looking for</h2>
     <div class="grid">
       <label class="wide">Roles (comma separated)<input id="roles" placeholder="Software Engineer, Full Stack Developer, Backend Developer"></label>
       <label class="wide">Locations (comma separated; "Remote" works too)<input id="locations" placeholder="Kochi, Bangalore, Remote"></label>
@@ -46,21 +76,38 @@
       <label>Posted within
         <select id="age"><option value="1">Past 24 hours</option><option value="7">Past week</option><option value="30">Past month</option></select></label>
     </div>
-    <p class="hint">Saved automatically. Up to 3 roles go into each search.</p>
   </section>
 
-  <div id="results"></div>
-
-  <section class="tip">
-    <b>A routine that finds more openings</b>
-    <ol>
-      <li>Every morning, set <b>Past 24 hours</b> and open the searches. Applying in the first day or two gets you seen far more often.</li>
-      <li>Open the <b>company career site</b> searches too: the same jobs often aren't on LinkedIn, and fewer people apply.</li>
-      <li>On a job you like, click the extension and <b>Save job</b>. It goes into <b>My applications → To apply</b>, so nothing gets lost.</li>
-      <li>Set up job alerts on LinkedIn and Naukri with the same roles, so new jobs come to you.</li>
-    </ol>
+  <section>
+    <div class="bar">
+      <h2>Jobs for you</h2><span class="grow"></span>
+      <progress id="progress" hidden></progress><span id="status"></span>
+      <button id="refresh" class="primary">Find jobs now</button>
+    </div>
+    <div class="chips" id="chips"></div>
+    <input id="filterText" type="search" placeholder="Filter by title, company or city">
+    <div id="jobs"></div>
   </section>
+
+  <details id="sources">
+    <summary>Companies and sources (<span id="coCount">0</span>)</summary>
+    <p class="hint">These companies' career sites are checked. Click × to skip one. Companies you save jobs from or apply to on Greenhouse, Lever, Ashby or Workday are added automatically.</p>
+    <div class="companies" id="companies"></div>
+    <div class="row"><input id="addUrl" placeholder="Add a company: paste its careers page link (Greenhouse, Lever, Ashby or Workday)"><button id="addCo">Add</button></div>
+    <p class="hint" id="addMsg"></p>
+    <h3>More Indian job sites (optional)</h3>
+    <p class="hint">Adzuna collects jobs from many Indian job sites (good for Kochi and smaller cities). Get a free key at
+      <a href="https://developer.adzuna.com/" target="_blank" rel="noopener">developer.adzuna.com</a> and paste it here. Stored only in this browser.</p>
+    <div class="row"><input id="adzId" placeholder="Adzuna App ID"><input id="adzKey" placeholder="Adzuna App key"></div>
+  </details>
+
+  <details id="more">
+    <summary>Search other sites yourself (LinkedIn, Naukri, Indeed…)</summary>
+    <p class="hint">These sites don't allow tools to read their jobs, so these open their search pages in new tabs, with your filters already set.</p>
+    <div id="results"></div>
+  </details>
 </main>
+<script src="jobfeed.js"></script>
 <script src="findjobs.js"></script>
 </body>
 </html>

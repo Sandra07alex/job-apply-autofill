@@ -688,7 +688,11 @@
     const u = new URL(location.href);
     const li = u.searchParams.get("currentJobId") || (u.pathname.match(/\/jobs\/view\/(\d+)/) || [])[1];
     if (/linkedin\.com$/.test(u.hostname) && li) return "linkedin.com/jobs/view/" + li;
-    return u.hostname + u.pathname.replace(/\/(apply|application|applyManually|autofillWithResume|useMyLastApplication)(\/.*)?$/i, "").replace(/\/$/, "");
+    // Same rule as JobFeed.jobKeyFor (Find jobs), so a saved job and its form are one entry.
+    // Greenhouse jobs on company sites differ only by ?gh_jid=.
+    const gh = u.searchParams.get("gh_jid");
+    return u.hostname + u.pathname.replace(/\/(apply|application|applyManually|autofillWithResume|useMyLastApplication)(\/.*)?$/i, "").replace(/\/$/, "") +
+      (gh ? "?gh_jid=" + gh : "");
   }
 
   function guessCompany() {

@@ -1,0 +1,62 @@
+// jobfeed.js filtering, with fake feeds instead of the internet.
+const assert = require('node:assert');
+const F = require('../extension/jobfeed.js');
+
+const feeds = {
+  'boards-api.greenhouse.io/v1/boards/acme/jobs': { jobs: [
+    { title: 'Software Engineer, New Grad', location: { name: 'Bengaluru' }, absolute_url: 'https://acme.com/jobs?gh_jid=1', first_published: new Date().toISOString() },
+    { title: 'Senior Software Engineer', location: { name: 'Bangalore' }, absolute_url: 'https://acme.com/jobs?gh_jid=2', first_published: new Date().toISOString() },
+    { title: 'Software Engineer 4', location: { name: 'Bangalore' }, absolute_url: 'https://acme.com/jobs?gh_jid=3', first_published: new Date().toISOString() },
+    { title: 'Sales Engineer', location: { name: 'Kochi' }, absolute_url: 'https://acme.com/jobs?gh_jid=4', first_published: new Date().toISOString() },
+    { title: 'Software Engineer', location: { name: 'Remote - US' }, absolute_url: 'https://acme.com/jobs?gh_jid=5', first_published: new Date().toISOString() },
+    { title: 'Software Engineer', location: { name: 'Kochi, Kerala' }, absolute_url: 'https://acme.com/jobs?gh_jid=6', first_published: '2020-01-01T00:00:00Z' },
+  ] },
+  'api.lever.co/v0/postings/beta?mode=json': [
+    { text: 'Web Developer', categories: { location: 'Cochin' }, hostedUrl: 'https://jobs.lever.co/beta/a', createdAt: Date.now(), descriptionPlain: '0-2 years of experience' },
+    { text: 'Full Stack Developer', categories: { location: 'Bangalore' }, hostedUrl: 'https://jobs.lever.co/beta/b', createdAt: Date.now(), descriptionPlain: 'You have 4+ years of experience building web apps.' },
+  ],
+  'wd.example.wd1.myworkdayjobs.com/wday/cxs/wd/Ext/jobs': { jobPostings: [
+    { title: 'Associate Software Developer - Java Full Stack', externalPath: '/job/Chennai/X_1', locationsText: 'IND - Chennai, India', postedOn: 'Posted 2 Days Ago' },
+    { title: 'Associate Software Developer - Java Full Stack', externalPath: '/job/Chennai/X_1b', locationsText: 'IND - Chennai, India', postedOn: 'Posted 2 Days Ago' },
+    { title: 'Software Engineer II', externalPath: '/job/Pune/Y_2', locationsText: '3 Locations', postedOn: 'Posted 5 Days Ago' },
+  ] },
+};
+// Remote is in the locations, so Remotive is read too.
+for (const role of ['Software Engineer', 'Full Stack Developer', 'web development']) feeds['remotive.com/api/remote-jobs?search=' + encodeURIComponent(role) + '&limit=50'] = { jobs: [] };
+const fakeFetch = async (url) => {
+  const key = url.replace(/^https:\/\//, '');
+  const body = feeds[key];
+  return { ok: !!body, status: body ? 200 : 404, json: async () => body };
+};
+
+(async () => {
+  const r = await F.findJobs({
+    roles: ['Software Engineer', 'Full Stack Developer', 'web development'], locations: ['Kochi', 'Bangalore', 'Remote'],
+    level: 'fresher', maxDays: 30, fetch: fakeFetch, concurrency: 2,
+    companies: [['greenhouse', 'acme', 'Acme'], ['lever', 'beta', 'Beta'], ['workday', 'wd.example.wd1.myworkdayjobs.com|wd|Ext', 'WD'], ['lever', 'missing', 'Gone']],
+  });
+  const titles = r.jobs.map((j) => `${j.title} @ ${j.company}${j.fresher ? ' [fresher]' : ''}`);
+  console.log('== jobfeed |', titles.join(' | '), '| failed:', r.failed.join(','));
+  assert.deepStrictEqual(r.failed, ['Gone']);
+  assert.ok(titles.includes('Software Engineer, New Grad @ Acme [fresher]'));
+  assert.ok(titles.includes('Associate Software Developer - Java Full Stack @ WD [fresher]'));
+  assert.ok(titles.includes('Web Developer @ Beta'), '"web development" matches "Web Developer"');
+  for (const gone of ['Senior Software Engineer', 'Software Engineer 4', 'Sales Engineer']) assert.ok(!titles.some((t) => t.startsWith(gone + ' @')), gone);
+  assert.ok(!titles.some((t) => t.startsWith('Full Stack Developer @ Beta')), '4+ years in the description is dropped for freshers');
+  assert.strictEqual(r.jobs.filter((j) => j.company === 'Acme' && j.title === 'Software Engineer').length, 0, 'Remote-US and a 2020 posting are dropped');
+  assert.strictEqual(r.jobs.filter((j) => j.title.startsWith('Associate Software Developer')).length, 1, 'duplicates removed');
+  assert.ok(r.jobs.find((j) => j.title === 'Software Engineer II').midLevel);
+  assert.strictEqual(r.jobs[0].fresher, true, 'fresher-friendly jobs come first');
+
+  // Small pieces
+  assert.deepStrictEqual(F.parseCareerUrl('https://intel.wd1.myworkdayjobs.com/en-US/External/job/India-Bangalore/X_JR1'), ['workday', 'intel.wd1.myworkdayjobs.com|intel|External', 'intel']);
+  assert.deepStrictEqual(F.parseCareerUrl('https://job-boards.greenhouse.io/stripe/jobs/123'), ['greenhouse', 'stripe', 'stripe']);
+  assert.deepStrictEqual(F.parseCareerUrl('https://jobs.lever.co/cred/abc/apply'), ['lever', 'cred', 'cred']);
+  assert.strictEqual(F.parseCareerUrl('https://www.naukri.com/job-listings-x'), null);
+  assert.strictEqual(F.minYears('Requires 3-5 years; we are 10 years old'), 3);
+  assert.strictEqual(F.postedDaysFromText('Posted Yesterday'), 1);
+  // Saved from Find jobs and later filled on the apply page: the same tracker entry.
+  assert.strictEqual(F.jobKeyFor('https://intel.wd1.myworkdayjobs.com/en-US/External/job/X_JR1/apply/applyManually'), 'intel.wd1.myworkdayjobs.com/en-US/External/job/X_JR1');
+  assert.strictEqual(F.jobKeyFor('https://stripe.com/jobs/search?gh_jid=42&utm=x'), 'stripe.com/jobs/search?gh_jid=42');
+  console.log('jobfeed: all checks passed');
+})().catch((e) => { console.error(e); process.exit(1); });
