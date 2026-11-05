@@ -169,6 +169,37 @@ loc.addEventListener('input',()=>setTimeout(()=>{ul.innerHTML='';for(const o of 
     console.log('   saved job          ',JSON.stringify(saved),'| field left empty:',untouched==='','| after Fill:',apps.length,'entry,',apps[0].status);
     await pg.close();
   }
+  // Save job (Alt+Shift+S) on LinkedIn, Naukri and Indeed pages: real job link, title, company, city.
+  for (const [site,url,body,want] of [
+    ['naukri','https://www.naukri.com/job-listings-python-developer-trainee-foxdale-kochi-0-to-1-years-061125000123',
+     `<title>Python Developer Trainee - Foxdale | Naukri.com</title><h1>Python Developer Trainee</h1>
+      <script type="application/ld+json">{"@context":"https://schema.org","@type":"JobPosting","title":"Python Developer Trainee",
+       "hiringOrganization":{"@type":"Organization","name":"Foxdale (P) Ltd"},"jobLocation":[{"@type":"Place","address":{"addressLocality":"Kochi","addressRegion":"Kerala"}}]}</script>`,
+     ['Python Developer Trainee','Foxdale (P) Ltd','Kochi, Kerala','https://www.naukri.com/job-listings-python-developer-trainee-foxdale-kochi-0-to-1-years-061125000123']],
+    ['indeed','https://in.indeed.com/jobs?q=software+engineer+fresher&l=Kochi&vjk=abc123def',
+     `<title>Software Engineer Fresher Jobs in Kochi | Indeed</title><h1>Software engineer fresher jobs</h1>
+      <h2 data-testid="jobsearch-JobInfoHeader-title">Junior Software Engineer - job post</h2>
+      <div data-testid="inlineHeader-companyName">AlgoMinds 4.2 ★</div><div data-testid="inlineHeader-companyLocation">Kochi, Kerala</div>`,
+     ['Junior Software Engineer','AlgoMinds','Kochi, Kerala','https://in.indeed.com/viewjob?jk=abc123def']],
+    ['linkedin','https://www.linkedin.com/jobs/search/?currentJobId=4012345678&keywords=full%20stack',
+     `<title>Jobs | LinkedIn</title><div class="job-details-jobs-unified-top-card__job-title"><h1>Full Stack Developer</h1></div>
+      <div class="job-details-jobs-unified-top-card__company-name">Velvet Labs</div>
+      <div class="job-details-jobs-unified-top-card__primary-description-container">Kochi, Kerala, India · 2 weeks ago · 40 applicants</div>`,
+     ['Full Stack Developer','Velvet Labs','Kochi, Kerala, India','https://www.linkedin.com/jobs/view/4012345678/']]]) {
+    const pg=await browser.newPage();
+    await pg.route(url.split('?')[0]+'*',r=>r.fulfill({contentType:'text/html; charset=utf-8',body}));
+    await pg.goto(url);
+    await pg.evaluate(p=>{window.__AUTOFILL_TEST__={profile:p};window.__AUTOFILL_SAVE_ONLY__=true},profile);
+    await pg.evaluate(src);
+    const toast1=await pg.evaluate(()=>document.body.lastElementChild.textContent);
+    await pg.evaluate(()=>{window.__AUTOFILL_SAVE_ONLY__=true});
+    await pg.evaluate(src); // second press: already saved
+    const toast2=await pg.evaluate(()=>document.body.lastElementChild.textContent);
+    const a=(await pg.evaluate(()=>window.__AUTOFILL_TEST__.applications));
+    console.log(`   save on ${site.padEnd(8)}`,JSON.stringify([a[0].role,a[0].company,a[0].location,a[0].url]),'| entries:',a.length,'|',toast1.replace('Undo',''),'|',toast2.replace('Undo','').slice(0,22));
+    if(JSON.stringify([a[0].role,a[0].company,a[0].location,a[0].url])!==JSON.stringify(want)||a.length!==1) throw new Error('save on '+site+' wrong');
+    await pg.close();
+  }
   for (const [url,title,body] of [
     ['https://intel.wd1.myworkdayjobs.com/en-US/External/job/India%2C-Bangalore/AI-System-Performance-Engineer_JR0288211/apply/applyManually','Careers','<h2 data-automation-id="jobPostingHeader">AI System Performance Engineer</h2>'],
     ['https://infilect.keka.com/careers/applyjob/142740?source=linkedin','Full Stack Development Intern | Infilect','']]) {

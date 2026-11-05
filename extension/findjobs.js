@@ -100,7 +100,7 @@ async function saveJob(job) {
   const { applications: apps = [] } = await chrome.storage.local.get("applications");
   const key = JobFeed.jobKeyFor(job.url);
   if (!apps.some((a) => a.key === key)) {
-    apps.push({ id: Date.now().toString(36), key, url: job.url, company: job.company, role: job.title, status: "To apply",
+    apps.push({ id: Date.now().toString(36), key, url: job.url, company: job.company, role: job.title, location: job.location, status: "To apply",
       created: today(), updated: today(), appliedOn: "", notes: `Found via Find jobs (${job.source})` });
     await chrome.storage.local.set({ applications: apps });
   }
@@ -165,6 +165,43 @@ function renderJobs() {
 }
 $("filterText").oninput = renderJobs;
 
+// ---------- Saved jobs (status "To apply" in My applications) ----------
+const siteName = (url) => {
+  try {
+    const h = new URL(url).hostname.replace(/^www\./, "");
+    return /linkedin/.test(h) ? "LinkedIn" : /naukri/.test(h) ? "Naukri" : /indeed/.test(h) ? "Indeed" : h;
+  } catch (_) { return ""; }
+};
+async function changeApp(id, change) {
+  const { applications: apps = [] } = await chrome.storage.local.get("applications");
+  const next = change === null ? apps.filter((a) => a.id !== id) : apps.map((a) => (a.id === id ? { ...a, ...change, updated: today() } : a));
+  await chrome.storage.local.set({ applications: next });
+  applications = next;
+  renderSaved();
+  renderJobs();
+}
+function renderSaved() {
+  const box = $("saved");
+  box.innerHTML = "";
+  const list = applications.filter((a) => a.status === "To apply").sort((a, b) => (b.created || "").localeCompare(a.created || ""));
+  $("savedCount").textContent = list.length;
+  if (!list.length) {
+    box.append(el("p", { className: "empty", textContent: "Nothing saved yet. Press Alt+Shift+S on a job page, or Save a job in the list above." }));
+    return;
+  }
+  for (const a of list) {
+    const title = el("a", { className: "title", href: a.url || "#", target: "_blank", rel: "noopener", textContent: a.role || "(no title)" });
+    const meta = el("div", { className: "meta", textContent: [a.company, a.location, a.created && "saved " + a.created, a.url && "from " + siteName(a.url)].filter(Boolean).join(" · ") });
+    const open = el("button", { className: "primary", textContent: "Apply ↗", disabled: !a.url });
+    open.onclick = () => chrome.tabs.create({ url: a.url });
+    const done = el("button", { textContent: "Mark applied", title: "Applied already (e.g. LinkedIn Easy Apply)" });
+    done.onclick = () => changeApp(a.id, { status: "Applied", appliedOn: today() });
+    const remove = el("button", { textContent: "Remove" });
+    remove.onclick = () => changeApp(a.id, null);
+    box.append(el("div", { className: "job" }, el("div", { className: "info" }, title, meta), el("div", { className: "acts" }, open, done, remove)));
+  }
+}
+
 // ---------- Search links for sites that can't be read ----------
 const quoted = (roles) => roles.map((r) => `"${r}"`).join(" OR ");
 const FRESHER_WORDS = '(fresher OR "entry level" OR junior OR graduate OR "0-2 years")';
@@ -216,7 +253,7 @@ for (const id of ["roles", "locations", "level", "age"]) {
 for (const [id, k] of [["adzId", "id"], ["adzKey", "key"]]) $(id).addEventListener("input", () => { adzuna[k] = $(id).value.trim(); saveState(); });
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && changes.applications) { applications = changes.applications.newValue || []; renderJobs(); }
+  if (area === "local" && changes.applications) { applications = changes.applications.newValue || []; renderJobs(); renderSaved(); }
 });
 
 chrome.storage.local.get(["jobSearch", "profile", "jobFeed", "jobFeedState", "applications"], (s) => {
@@ -238,6 +275,7 @@ chrome.storage.local.get(["jobSearch", "profile", "jobFeed", "jobFeedState", "ap
   $("adzId").value = adzuna.id || ""; $("adzKey").value = adzuna.key || "";
   renderCompanies();
   renderJobs();
+  renderSaved();
   renderLinks();
   if (!feed || Date.now() - feed.at > STALE_MS) refresh();
 });

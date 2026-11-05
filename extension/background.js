@@ -5,13 +5,18 @@ function fillTab(tabId, frameIds) {
   return chrome.scripting.executeScript({ target: frameIds ? { tabId, frameIds } : { tabId, allFrames: true }, files: FILL_FILES });
 }
 
-// Keyboard shortcuts: Alt+Shift+F fills the current page, Alt+Shift+N goes to the next step.
+// Keyboard shortcuts: Alt+Shift+F fills the current page, Alt+Shift+N goes to the next step,
+// Alt+Shift+S saves the job you're looking at (LinkedIn, Naukri, Indeed, any job page).
 chrome.commands.onCommand.addListener(async (command) => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
   try {
     if (command === "fill-page") await fillTab(tab.id);
     if (command === "next-step") await chrome.tabs.sendMessage(tab.id, { type: "guide-next" });
+    if (command === "save-job") {
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => { window.__AUTOFILL_SAVE_ONLY__ = true; } });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["fill.js"] });
+    }
   } catch (e) {
     console.warn("Autofill could not run on this page:", e);
   }

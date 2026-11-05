@@ -688,12 +688,40 @@
     const u = new URL(location.href);
     const li = u.searchParams.get("currentJobId") || (u.pathname.match(/\/jobs\/view\/(\d+)/) || [])[1];
     if (/linkedin\.com$/.test(u.hostname) && li) return "linkedin.com/jobs/view/" + li;
+    // Indeed: every job is /viewjob (or a search page) told apart by jk / vjk.
+    const jk = u.searchParams.get("vjk") || u.searchParams.get("jk");
+    if (/indeed\./.test(u.hostname) && jk) return u.hostname + "/viewjob?jk=" + jk;
     // Same rule as JobFeed.jobKeyFor (Find jobs), so a saved job and its form are one entry.
     // Greenhouse jobs on company sites differ only by ?gh_jid=.
     const gh = u.searchParams.get("gh_jid");
     return u.hostname + u.pathname.replace(/\/(apply|application|applyManually|autofillWithResume|useMyLastApplication)(\/.*)?$/i, "").replace(/\/$/, "") +
       (gh ? "?gh_jid=" + gh : "");
   }
+
+  // Most job pages (Naukri, Indeed, company sites) describe the job for Google in a
+  // hidden JSON-LD "JobPosting": the most reliable title, company and city.
+  function jobPostingLd() {
+    const decode = (s) => { const t = document.createElement("textarea"); t.innerHTML = String(s || ""); return t.value.trim(); };
+    for (const s of document.querySelectorAll("script[type='application/ld+json']")) {
+      let d;
+      try { d = JSON.parse(s.textContent); } catch (_) { continue; }
+      const items = [].concat(d, (d && d["@graph"]) || []).flat();
+      const jp = items.find((x) => x && /JobPosting/.test([].concat(x["@type"]).join(" ")));
+      if (!jp) continue;
+      const org = jp.hiringOrganization;
+      const a = ([].concat(jp.jobLocation || [])[0] || {}).address || {};
+      return { title: decode(jp.title), company: decode(typeof org === "string" ? org : org && org.name),
+        location: [a.addressLocality, a.addressRegion].filter(Boolean).join(", ") || (/TELECOMMUTE/i.test(jp.jobLocationType || "") ? "Remote" : "") };
+    }
+    return null;
+  }
+  const firstText = (sel) => textOf(document.querySelector(sel));
+  // Indeed and Naukri page parts (Naukri's class names end in random letters, hence [class*=]).
+  const SITE_BITS = {
+    title: "[data-testid='jobsearch-JobInfoHeader-title'], [class*='jd-header-title']",
+    company: "[data-testid='inlineHeader-companyName'], [class*='jd-header-comp-name'] a, [class*='jd-header-comp-name']",
+    location: "[data-testid='inlineHeader-companyLocation'], [data-testid='job-location'], [class*='jhc__location'] a, [class*='jhc__location']",
+  };
 
   function guessCompany() {
     const h = location.hostname.replace(/^www\./, ""), parts = location.pathname.split("/").filter(Boolean);
@@ -702,6 +730,11 @@
       const t = textOf(el).replace(/^apply to\s+/i, "");
       if (t) return t;
     }
+    const ld = jobPostingLd();
+    if (ld && ld.company) return ld.company;
+    const onPage = firstText(SITE_BITS.company);
+    // "AlgoMinds 4.2 ★" / "AlgoMinds 4.2 out of 5 stars" -> "AlgoMinds"
+    if (onPage) return onPage.replace(/\s+\d(\.\d)?(\s*(out of 5|stars?|reviews?|[^\w\s]+))*\s*$/i, "").trim();
     if (/(myworkdayjobs|keka|darwinbox|zohorecruit|freshteam|recruitee|bamboohr|breezy|workable)\./.test(h)) return titleCase(h.split(".")[0]);
     if (/^(ats\.rippling\.com|boards\.greenhouse\.io|job-boards\.greenhouse\.io|jobs\.lever\.co|jobs\.ashbyhq\.com|apply\.workable\.com|jobs\.smartrecruiters\.com)$/.test(h) && parts[0]) return titleCase(parts[0]);
     const site = document.querySelector("meta[property='og:site_name']");
@@ -714,6 +747,10 @@
     if (wd && textOf(wd)) return textOf(wd);
     const li = document.querySelector(".job-details-jobs-unified-top-card__job-title, .jobs-unified-top-card__job-title");
     if (li && textOf(li)) return textOf(li);
+    const ld = jobPostingLd();
+    if (ld && ld.title) return ld.title;
+    const site = firstText(SITE_BITS.title);
+    if (site) return site.replace(/\s*-\s*job post$/i, "");
     const c = norm(company);
     const keep = (s) => s && !(c && norm(s).includes(c)) && !/^(careers?|jobs?|job application|apply|application|workday|home)$/i.test(s);
     for (const raw of [textOf(document.querySelector("h1")), document.title]) {
@@ -722,6 +759,24 @@
       if (segs.length && segs[0].length <= 120) return segs[0];
     }
     return "";
+  }
+
+  function guessLocation() {
+    const li = firstText(".job-details-jobs-unified-top-card__primary-description-container, .job-details-jobs-unified-top-card__tertiary-description-container, .jobs-unified-top-card__bullet");
+    if (li) return li.split("·")[0].trim(); // "Kochi, Kerala, India · 2 weeks ago"
+    const ld = jobPostingLd();
+    if (ld && ld.location) return ld.location;
+    return firstText(SITE_BITS.location);
+  }
+
+  // A link to the job itself, not the search page it was opened from.
+  function jobUrl() {
+    const u = new URL(location.href);
+    const li = u.searchParams.get("currentJobId");
+    if (/linkedin\.com$/.test(u.hostname) && li) return `https://www.linkedin.com/jobs/view/${li}/`;
+    const jk = u.searchParams.get("vjk") || u.searchParams.get("jk");
+    if (/indeed\./.test(u.hostname) && jk) return `https://${u.hostname}/viewjob?jk=${jk}`;
+    return location.href;
   }
 
   // status: "In progress" when filling, "To apply" when you save a job for later.
@@ -734,7 +789,7 @@
       if (app.status === "To apply" && status === "In progress") app.status = "In progress"; // started applying
     } else {
       const company = guessCompany();
-      app = { id: Date.now().toString(36), key, url: location.href, company, role: guessRole(company),
+      app = { id: Date.now().toString(36), key, url: jobUrl(), company, role: guessRole(company), location: guessLocation(),
         status, created: today(), updated: today(), appliedOn: "", notes: "" };
       apps.push(app);
     }
@@ -773,7 +828,15 @@
   // "Save job" in the popup: only add this job to the tracker as "To apply".
   if (window.__AUTOFILL_SAVE_ONLY__) {
     window.__AUTOFILL_SAVE_ONLY__ = false;
+    const before = ((await getStore(["applications"])).applications || []).length;
     const app = await logApplication("To apply");
+    const isNew = ((await getStore(["applications"])).applications || []).length > before;
+    const what = [app.role, app.company].filter(Boolean).join(" at ") || "this job";
+    toast(isNew ? `Saved to your job list: ${what}` : `Already in your list: ${what} (${app.status})`, async () => {
+      if (!isNew) return;
+      const s = await getStore(["applications"]);
+      await setStore({ applications: (s.applications || []).filter((a) => a.key !== app.key) });
+    });
     return { saved: { company: app.company, role: app.role, status: app.status } };
   }
 

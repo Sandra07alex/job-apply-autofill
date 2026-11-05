@@ -89,6 +89,13 @@
     <div id="jobs"></div>
   </section>
 
+  <section>
+    <div class="bar"><h2>Saved jobs to apply to (<span id="savedCount">0</span>)</h2></div>
+    <p class="hint" style="margin:0 0 6px">Jobs you saved anywhere: from this page, or on LinkedIn, Naukri, Indeed and company sites with
+      <b>Alt+Shift+S</b> (or the popup's <b>Save job for later</b>). Open a job, apply, and it moves to My applications as In progress and then Applied.</p>
+    <div id="saved"></div>
+  </section>
+
   <details id="sources">
     <summary>Companies and sources (<span id="coCount">0</span>)</summary>
     <p class="hint">These companies' career sites are checked. Click × to skip one. Companies you save jobs from or apply to on Greenhouse, Lever, Ashby or Workday are added automatically.</p>
@@ -102,8 +109,9 @@
   </details>
 
   <details id="more">
-    <summary>Search other sites yourself (LinkedIn, Naukri, Indeed…)</summary>
-    <p class="hint">These sites don't allow tools to read their jobs, so these open their search pages in new tabs, with your filters already set.</p>
+    <summary>Search LinkedIn, Naukri, Indeed… and save jobs with Alt+Shift+S</summary>
+    <p class="hint">These sites don't allow tools to read their listings (LinkedIn can restrict accounts that use one), so open a search below,
+      click a job, and press <b>Alt+Shift+S</b>: it's added to <b>Saved jobs</b> above with its link, company and city.</p>
     <div id="results"></div>
   </details>
 </main>

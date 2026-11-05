@@ -22,6 +22,10 @@
     "next-step": {
       "suggested_key": { "default": "Alt+Shift+N" },
       "description": "Go to the next step of the application (never submits)"
+    },
+    "save-job": {
+      "suggested_key": { "default": "Alt+Shift+S" },
+      "description": "Save the job on this page to your job list"
     }
   }
 }
