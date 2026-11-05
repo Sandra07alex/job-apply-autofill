@@ -103,6 +103,33 @@ const daysSince = (iso) => (iso ? Math.floor((Date.parse(today()) - Date.parse(i
 const niceDate = (iso) => (iso ? new Date(iso + "T00:00").toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }) : "");
 const save = () => chrome.storage.local.set({ outreach: data });
 
+// Bumped whenever DEFAULT_TEMPLATES.first changes. If your saved email differs from the new
+// default (you edited it), ask once instead of replacing it.
+const DEFAULT_VERSION = 3;
+function offerNewDefault() {
+  const box = $("tplNotice");
+  const same = data.templates.first.body.trim() === DEFAULT_TEMPLATES.first.body.trim();
+  if (same || (data.defaultVersion || 0) >= DEFAULT_VERSION) {
+    if (same && data.defaultVersion !== DEFAULT_VERSION) { data.defaultVersion = DEFAULT_VERSION; save(); }
+    box.hidden = true;
+    return;
+  }
+  const done = () => { data.defaultVersion = DEFAULT_VERSION; save(); box.hidden = true; };
+  const use = el("button", { className: "primary", textContent: "Use the new default" });
+  use.onclick = () => {
+    data.templates.first = structuredClone(DEFAULT_TEMPLATES.first);
+    done();
+    editing = "first";
+    renderTemplate();
+    renderMessage();
+  };
+  const keep = el("button", { textContent: "Keep mine" });
+  keep.onclick = done;
+  box.innerHTML = "";
+  box.append(el("span", { textContent: "There's a new default first email. Yours is different (you've edited it), so it wasn't replaced. " }), use, " ", keep);
+  box.hidden = false;
+}
+
 function el(tag, props = {}, ...kids) {
   const e = document.createElement(tag);
   Object.assign(e, props);
@@ -464,6 +491,7 @@ document.querySelectorAll(".tab").forEach((b) => (b.onclick = () => { editing = 
 $("resetTemplate").onclick = () => {
   if (!confirm(`Replace your ${editing === "first" ? "first email" : "follow-up"} text with the default?`)) return;
   data.templates[editing] = structuredClone(DEFAULT_TEMPLATES[editing]);
+  if (editing === "first") { data.defaultVersion = DEFAULT_VERSION; $("tplNotice").hidden = true; }
   save(); renderTemplate(); renderMessage();
 };
 
@@ -518,7 +546,8 @@ chrome.storage.local.get(["profile", "resume", "outreach"], (s) => {
   if (s.outreach) {
     // Earlier versions kept one template under "template".
     const templates = s.outreach.templates || { first: s.outreach.template || DEFAULT_TEMPLATES.first };
-    data = { templates: { ...structuredClone(DEFAULT_TEMPLATES), ...templates }, rows: s.outreach.rows || [] };
+    data = { templates: { ...structuredClone(DEFAULT_TEMPLATES), ...templates }, rows: s.outreach.rows || [],
+      defaultVersion: s.outreach.defaultVersion || 0 };
     // Upgrade the old intro line (dropped whenever a company had no role) if you haven't reworded it.
     data.templates.first.body = data.templates.first.body.replace(OLD_INTRO, "My name is {fullName}, and I'm writing to apply for {position} at {company}.");
     if ([PREVIOUS_FIRST_BODY, PREVIOUS_LINE_BY_LINE_BODY].some((b) => data.templates.first.body.trim() === b.trim())) {
@@ -526,6 +555,7 @@ chrome.storage.local.get(["profile", "resume", "outreach"], (s) => {
     }
     data.templates.followup.body = data.templates.followup.body.replace("my application for the {role} role at {company}", "my application for {position} at {company}");
   }
+  offerNewDefault();
   selected = data.rows[0] && data.rows[0].id;
   renderTemplate();
   renderResumeLine();
