@@ -679,10 +679,97 @@
     }, 1000);
   }
 
+  // ---------- Application tracker ----------
+  const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+  const titleCase = (s) => s.replace(/[-_]+/g, " ").replace(/\b[a-z]/g, (c) => c.toUpperCase()).trim();
+
+  // One entry per job, whichever step of the form you're on.
+  function jobKey() {
+    const u = new URL(location.href);
+    const li = u.searchParams.get("currentJobId") || (u.pathname.match(/\/jobs\/view\/(\d+)/) || [])[1];
+    if (/linkedin\.com$/.test(u.hostname) && li) return "linkedin.com/jobs/view/" + li;
+    return u.hostname + u.pathname.replace(/\/(apply|application|applyManually|autofillWithResume|useMyLastApplication)(\/.*)?$/i, "").replace(/\/$/, "");
+  }
+
+  function guessCompany() {
+    const h = location.hostname.replace(/^www\./, ""), parts = location.pathname.split("/").filter(Boolean);
+    if (/linkedin\.com$/.test(h)) {
+      const el = document.querySelector(".job-details-jobs-unified-top-card__company-name, .jobs-unified-top-card__company-name, [data-test-modal] h2, .jobs-easy-apply-modal h2");
+      const t = textOf(el).replace(/^apply to\s+/i, "");
+      if (t) return t;
+    }
+    if (/(myworkdayjobs|keka|darwinbox|zohorecruit|freshteam|recruitee|bamboohr|breezy|workable)\./.test(h)) return titleCase(h.split(".")[0]);
+    if (/^(ats\.rippling\.com|boards\.greenhouse\.io|job-boards\.greenhouse\.io|jobs\.lever\.co|jobs\.ashbyhq\.com|apply\.workable\.com|jobs\.smartrecruiters\.com)$/.test(h) && parts[0]) return titleCase(parts[0]);
+    const site = document.querySelector("meta[property='og:site_name']");
+    if (site && site.content) return site.content.replace(/\s*(careers?|jobs)\s*$/i, "").trim();
+    return titleCase(h.split(".").slice(-2, -1)[0] || h);
+  }
+
+  function guessRole(company) {
+    const wd = document.querySelector("[data-automation-id='jobPostingHeader']");
+    if (wd && textOf(wd)) return textOf(wd);
+    const li = document.querySelector(".job-details-jobs-unified-top-card__job-title, .jobs-unified-top-card__job-title");
+    if (li && textOf(li)) return textOf(li);
+    const c = norm(company);
+    const keep = (s) => s && !(c && norm(s).includes(c)) && !/^(careers?|jobs?|job application|apply|application|workday|home)$/i.test(s);
+    for (const raw of [textOf(document.querySelector("h1")), document.title]) {
+      const t = String(raw || "").replace(/^(apply(\s+(for|to|now))?|application(\s+for)?|job\s*application)\s*[:\-–|]\s*/i, "").trim();
+      const segs = t.split(/\s+[|–—]\s+/).filter(keep);
+      if (segs.length && segs[0].length <= 120) return segs[0];
+    }
+    return "";
+  }
+
+  async function logApplication() {
+    const key = jobKey();
+    const apps = (await getStore(["applications"])).applications || [];
+    let app = apps.find((a) => a.key === key);
+    if (app) {
+      app.updated = today();
+    } else {
+      const company = guessCompany();
+      app = { id: Date.now().toString(36), key, url: location.href, company, role: guessRole(company),
+        status: "In progress", created: today(), updated: today(), appliedOn: "", notes: "" };
+      apps.push(app);
+    }
+    await setStore({ applications: apps });
+    return app;
+  }
+
+  async function updateApplication(key, change) {
+    const apps = (await getStore(["applications"])).applications || [];
+    const app = apps.find((a) => a.key === key);
+    if (!app) return null;
+    const before = { ...app };
+    Object.assign(app, change, { updated: today() });
+    await setStore({ applications: apps });
+    return before;
+  }
+
+  // Your final click on "Submit" / "Apply" after filling marks the job as applied.
+  const SUBMIT_RE = /^(submit|submit application|submit your application|send application|apply|apply now|finish|complete application)$/i;
+  function watchSubmit(key) {
+    if (window.__autofillSubmitWatch) document.removeEventListener("click", window.__autofillSubmitWatch, true);
+    window.__autofillSubmitWatch = async (e) => {
+      const b = e.target.closest && e.target.closest("button, [role='button'], input[type=submit], a");
+      if (!b || !SUBMIT_RE.test((textOf(b) || b.value || b.getAttribute("aria-label") || "").trim())) return;
+      const apps = (await getStore(["applications"])).applications || [];
+      const app = apps.find((a) => a.key === key);
+      if (!app || app.status !== "In progress") return;
+      const before = await updateApplication(key, { status: "Applied", appliedOn: today() });
+      toast(`Marked as applied in your tracker: ${[app.role, app.company].filter(Boolean).join(" at ")}`,
+        () => updateApplication(key, { status: before.status, appliedOn: before.appliedOn }));
+    };
+    document.addEventListener("click", window.__autofillSubmitWatch, true);
+  }
+
   // ---------- Run ----------
   await fillPass();
   if (await addMissingEntries()) await fillPass();
   const uploaded = await attachResume();
   startLearning();
-  return { filled, unmatched, uploaded, watching: leftForYou.size };
+  let app = null;
+  if (filled || unmatched) { app = await logApplication(); watchSubmit(app.key); }
+  return { filled, unmatched, uploaded, watching: leftForYou.size,
+    tracked: app && { company: app.company, role: app.role, status: app.status } };
 })();

@@ -131,4 +131,35 @@ loc.addEventListener('input',()=>setTimeout(()=>{ul.innerHTML='';for(const o of 
   console.log('   toast             ',saved.toast);
   await page.close();
 }
+// Tracker: logged on fill (once per job across steps), marked Applied on the final Submit click.
+{
+  const page=await browser.newPage();
+  const html=(step)=>`<html><head><title>Apply - Junior Software Engineer - Backend and Optimisation</title></head><body>
+<h1>Application: Junior Software Engineer - Backend and Optimisation</h1>
+<label for=fn>First name</label><input id=fn><p>Step ${step}</p><button id=submit type=button>Submit application</button></body></html>`;
+  await page.route('https://ats.rippling.com/**',r=>r.fulfill({contentType:'text/html',body:html(r.request().url().endsWith('step2')?2:1)}));
+  await page.goto('https://ats.rippling.com/benchmark-construction-technology/jobs/3bdf1ad9/apply');
+  await page.evaluate(p=>{window.__AUTOFILL_TEST__={profile:p}},profile);
+  const r1=await page.evaluate(src);
+  const apps=await page.evaluate(()=>window.__AUTOFILL_TEST__.applications);
+  await page.evaluate(()=>{history.pushState({},'','/benchmark-construction-technology/jobs/3bdf1ad9/apply/step2');document.getElementById('fn').value='';});
+  await page.evaluate(src);
+  const afterStep2=await page.evaluate(()=>window.__AUTOFILL_TEST__.applications.length);
+  await page.click('#submit');await page.waitForTimeout(300);
+  const after=await page.evaluate(()=>window.__AUTOFILL_TEST__.applications[0]);
+  console.log('== tracker',JSON.stringify(r1.tracked));
+  console.log('   logged            ',apps.length,apps[0].key);
+  console.log('   entries after step 2',afterStep2);
+  console.log('   after submit      ',after.status,after.appliedOn?'(dated)':'(no date)');
+  await page.close();
+  for (const [url,title,body] of [
+    ['https://intel.wd1.myworkdayjobs.com/en-US/External/job/India%2C-Bangalore/AI-System-Performance-Engineer_JR0288211/apply/applyManually','Careers','<h2 data-automation-id="jobPostingHeader">AI System Performance Engineer</h2>'],
+    ['https://infilect.keka.com/careers/applyjob/142740?source=linkedin','Full Stack Development Intern | Infilect','']]) {
+    const pg=await browser.newPage();
+    await pg.route(url.split('?')[0]+'*',r=>r.fulfill({contentType:'text/html',body:`<title>${title}</title>${body}<label for=fn>First name</label><input id=fn>`}));
+    await pg.goto(url);await pg.evaluate(p=>{window.__AUTOFILL_TEST__={profile:p}},profile);
+    const t=(await pg.evaluate(src)).tracked;const k=await pg.evaluate(()=>window.__AUTOFILL_TEST__.applications[0].key);
+    console.log('   guessed           ',t.company,'|',t.role,'|',k);await pg.close();
+  }
+}
 await browser.close();})();

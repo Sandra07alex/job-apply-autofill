@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Applications</title>
+<style>
+  :root { --b: #e5e7eb; --t: #1f2937; --m: #6b7280; --a: #2563eb; }
+  body { font-family: system-ui, sans-serif; color: var(--t); background: #f9fafb; margin: 0; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
+  header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p.sub { color: var(--m); margin: 0 0 16px; font-size: 14px; }
+  .actions { display: flex; gap: 8px; }
+  button { font: inherit; font-size: 13px; border: 1px solid var(--b); background: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button.primary { background: var(--a); color: #fff; border-color: var(--a); font-weight: 600; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .chip { border-radius: 999px; padding: 4px 12px; }
+  .chip b { margin-left: 4px; }
+  .chip.on { background: var(--t); color: #fff; border-color: var(--t); }
+  #search { width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--b); border-radius: 8px; margin-bottom: 12px; }
+  .wrap { background: #fff; border: 1px solid var(--b); border-radius: 12px; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 820px; }
+  th { text-align: left; font-weight: 600; color: var(--m); font-size: 12px; padding: 10px 8px; border-bottom: 1px solid var(--b); }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--b); vertical-align: middle; }
+  tr:last-child td { border-bottom: 0; }
+  td input, td select { font: inherit; width: 100%; box-sizing: border-box; border: 1px solid transparent; border-radius: 6px; padding: 5px 6px; background: transparent; color: var(--t); }
+  td input:hover, td select:hover { border-color: var(--b); }
+  td input:focus, td select:focus { border-color: var(--a); outline: none; background: #fff; }
+  .company input { font-weight: 600; }
+  .status { display: flex; align-items: center; gap: 6px; }
+  .status select { width: auto; font-weight: 600; }
+  .badge { font-size: 11px; font-weight: 600; background: #fef3c7; color: #92400e; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  .when { color: var(--m); font-size: 12px; white-space: nowrap; }
+  .icons { white-space: nowrap; text-align: right; }
+  .icons a, .icons button { border: 0; background: none; padding: 4px 6px; color: var(--m); text-decoration: none; font-size: 15px; cursor: pointer; }
+  .icons a:hover { color: var(--a); } .icons button:hover { color: #dc2626; }
+  .empty { padding: 32px; text-align: center; color: var(--m); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>My applications</h1>
+      <p class="sub">Logged when you click Fill, marked Applied when you submit. Stored only in this browser.</p>
+    </div>
+    <div class="actions">
+      <button id="add" class="primary">+ Add application</button>
+      <button id="csv">Export CSV</button>
+    </div>
+  </header>
+  <div class="chips" id="chips"></div>
+  <input id="search" type="search" placeholder="Search company, role or notes">
+  <div class="wrap">
+    <table>
+      <thead><tr><th style="width:18%">Company</th><th style="width:24%">Role</th><th style="width:17%">Status</th>
+        <th style="width:12%">Applied on</th><th>Notes</th><th style="width:70px"></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty" hidden></div>
+  </div>
+</main>
+<script src="tracker.js"></script>
+</body>
+</html>

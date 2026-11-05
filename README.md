@@ -16,6 +16,7 @@ Applying to jobs means entering identical information dozens of times across dif
 - **Learns from you:** answer a field it couldn't, and it saves that answer for next time (with Undo). Consents and open questions are never learned
 - **Resume upload:** attaches your saved resume to "Resume / CV" upload boxes
 - **Adds blocks:** clicks "Add" until there's an education / experience block for every profile entry
+- **Application tracker:** every job you fill is logged (company, role, link, date) and marked Applied when you submit. Track interviews, offers and rejections, get "Follow up" reminders after 10 quiet days, and export to CSV
 - **Workday pickers:** opens "Select One" lists and picks from School / Skills search suggestions
 - **One click or one shortcut** (`Alt+Shift+F`) to fill the current page
 - **Repeated sections:** fills Experience 1, Experience 2, Education 1 and so on with the right entry
@@ -48,6 +49,7 @@ extension/
   manifest.json   Chrome extension config (Manifest V3)
   popup.html/js   The toolbar popup (Fill button, overwrite toggle)
   options.html/js The profile editor page
+  tracker.html/js The "My applications" tracker page
   resume.js       Turns pasted resume text into a profile
   fill.js         The core: reads each form field, decides what it's asking for, fills it
   background.js   Keyboard shortcut handler
@@ -86,7 +88,7 @@ npm test
 - [ ] Optional AI drafts for open-ended questions using the job description, shown for review before inserting
 - [x] Resume upload helper
 - [x] Learn answers from fields you fill in yourself
-- [ ] Application tracker (company, role, date, link) logged on each fill
+- [x] Application tracker (company, role, date, link) logged on each fill
 - [ ] Site-specific rules for Naukri, Instahyre, Greenhouse, Lever
 
 ## License

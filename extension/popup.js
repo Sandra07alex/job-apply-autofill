@@ -11,6 +11,7 @@ overwriteEl.addEventListener("change", () => {
 });
 
 document.getElementById("edit").addEventListener("click", () => chrome.runtime.openOptionsPage());
+document.getElementById("apps").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("tracker.html") }));
 
 document.getElementById("fill").addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -20,7 +21,7 @@ document.getElementById("fill").addEventListener("click", async () => {
       target: { tabId: tab.id, allFrames: true },
       files: ["fill.js"],
     });
-    let filled = 0, needs = 0, uploaded = 0, watching = 0, err = null;
+    let filled = 0, needs = 0, uploaded = 0, watching = 0, err = null, tracked = null;
     for (const r of results) {
       if (!r.result) continue;
       if (r.result.error) err = r.result.error;
@@ -28,12 +29,22 @@ document.getElementById("fill").addEventListener("click", async () => {
       needs += r.result.unmatched || 0;
       uploaded += r.result.uploaded || 0;
       watching += r.result.watching || 0;
+      tracked = tracked || r.result.tracked;
     }
     if (err && !filled) statusEl.textContent = err;
-    else statusEl.innerHTML = `Filled <b>${filled}</b> field(s). <b>${needs}</b> left for you.` +
-      (uploaded ? "<br>Attached your resume." : "") +
-      (needs ? "<br>Check the orange ones, then review and submit." : "<br>Review everything, then submit.") +
-      (watching ? "<br>Answers you pick yourself are saved for next time." : "");
+    else {
+      statusEl.innerHTML = `Filled <b>${filled}</b> field(s). <b>${needs}</b> left for you.` +
+        (uploaded ? "<br>Attached your resume." : "") +
+        (needs ? "<br>Check the orange ones, then review and submit." : "<br>Review everything, then submit.") +
+        (watching ? "<br>Answers you pick yourself are saved for next time." : "");
+      // Company/role come from the page, so add them as text, never as HTML.
+      if (tracked) {
+        const line = document.createElement("div");
+        line.style.marginTop = "6px";
+        line.textContent = `Tracked: ${[tracked.role, tracked.company].filter(Boolean).join(" at ")} (${tracked.status})`;
+        statusEl.appendChild(line);
+      }
+    }
   } catch (e) {
     statusEl.textContent = "Can't run on this page (Chrome blocks extensions on some pages).";
   }
