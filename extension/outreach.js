@@ -10,7 +10,7 @@ During college I built 15+ projects, from full-stack web platforms to computer v
 I am excited about {company} because {note}
 I would be glad to grow with your team and contribute from day one.
 
-I have attached my resume. You can also see my work at sandraalex.site and github.com/Sandra07alex.
+I have attached my resume. You can also see my work at sandra-alex-portfolio.vercel.app and github.com/Sandra07alex.
 
 Thank you for your time and consideration.
 
@@ -39,6 +39,8 @@ Best regards,
 const OLD_INTRO = "My name is {fullName}, and I'm writing to apply for the {role} role at {company}.";
 // Earlier first-email defaults. A saved template still exactly one of these is replaced by the
 // current default; one you've edited is left alone.
+// The same email with the old portfolio domain (sandraalex.site, expiring Nov 2026).
+const PREVIOUS_OLD_SITE_BODY = DEFAULT_TEMPLATES.first.body.replace("sandra-alex-portfolio.vercel.app", "sandraalex.site");
 const PREVIOUS_LINE_BY_LINE_BODY = `Dear {hrName},
 
 I am writing to apply for {position} at {company}.
@@ -105,7 +107,7 @@ const save = () => chrome.storage.local.set({ outreach: data });
 
 // Bumped whenever DEFAULT_TEMPLATES.first changes. If your saved email differs from the new
 // default (you edited it), ask once instead of replacing it.
-const DEFAULT_VERSION = 3;
+const DEFAULT_VERSION = 4;
 function offerNewDefault() {
   const box = $("tplNotice");
   const same = data.templates.first.body.trim() === DEFAULT_TEMPLATES.first.body.trim();
@@ -550,7 +552,7 @@ chrome.storage.local.get(["profile", "resume", "outreach"], (s) => {
       defaultVersion: s.outreach.defaultVersion || 0 };
     // Upgrade the old intro line (dropped whenever a company had no role) if you haven't reworded it.
     data.templates.first.body = data.templates.first.body.replace(OLD_INTRO, "My name is {fullName}, and I'm writing to apply for {position} at {company}.");
-    if ([PREVIOUS_FIRST_BODY, PREVIOUS_LINE_BY_LINE_BODY].some((b) => data.templates.first.body.trim() === b.trim())) {
+    if ([PREVIOUS_FIRST_BODY, PREVIOUS_LINE_BY_LINE_BODY, PREVIOUS_OLD_SITE_BODY].some((b) => data.templates.first.body.trim() === b.trim())) {
       data.templates.first = structuredClone(DEFAULT_TEMPLATES.first);
     }
     data.templates.followup.body = data.templates.followup.body.replace("my application for the {role} role at {company}", "my application for {position} at {company}");
