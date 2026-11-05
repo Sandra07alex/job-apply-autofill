@@ -3,21 +3,25 @@ const DEFAULT_TEMPLATES = {
     subject: "Application for {role} – {fullName}",
     body: `Dear {hrName},
 
-My name is {fullName}, and I'm writing to apply for {position} at {company}.
-{note}
+I am writing to apply for {position} at {company}.
+I am {education}.
+I am currently working as a {currentTitle} at {currentCompany}.
 
-I currently work at {currentCompany} as a {currentTitle}.
-I studied {degree} in {field} at {school}.
-My skills include {skills}.
+During college I built 15+ projects, from full-stack web platforms to computer vision and deep learning models. Each one meant learning a new tool or technology, so I pick things up quickly and put them to work.
 
-I've attached my resume and would be glad to talk about how I can contribute to {company}.
+I am excited about {company} because {note}
+I would be glad to grow with your team and contribute from day one.
+
+I have attached my resume.
+You can also see my work at {workLinks}.
+
+Thank you for your time and consideration.
 
 Best regards,
 {fullName}
 {phone}
 {email}
-{linkedin}
-{portfolio}`,
+LinkedIn: {linkedin}`,
   },
   followup: {
     subject: "Re: {firstSubject}",
@@ -36,10 +40,29 @@ Best regards,
 };
 // The intro line of the first default, before {position}. Saved templates still equal to it get upgraded.
 const OLD_INTRO = "My name is {fullName}, and I'm writing to apply for the {role} role at {company}.";
+// The previous first-email default. A saved template still exactly this is replaced by the new
+// default; one you've edited is left alone.
+const PREVIOUS_FIRST_BODY = `Dear {hrName},
+
+My name is {fullName}, and I'm writing to apply for {position} at {company}.
+{note}
+
+I currently work at {currentCompany} as a {currentTitle}.
+I studied {degree} in {field} at {school}.
+My skills include {skills}.
+
+I've attached my resume and would be glad to talk about how I can contribute to {company}.
+
+Best regards,
+{fullName}
+{phone}
+{email}
+{linkedin}
+{portfolio}`;
 const SKILLS_IN_EMAIL = 8;
 const PLACEHOLDERS = {
-  first: ["company", "position", "role", "hrName", "note", "fullName", "firstName", "currentTitle", "currentCompany",
-    "skills", "experience", "degree", "field", "school", "phone", "email", "linkedin", "github", "portfolio"],
+  first: ["company", "position", "role", "hrName", "note", "fullName", "firstName", "education", "currentTitle", "currentCompany",
+    "skills", "experience", "degree", "field", "school", "gradYear", "gpa", "phone", "email", "linkedin", "github", "portfolio", "workLinks"],
   followup: ["company", "position", "role", "hrName", "sentOn", "firstSubject", "fullName", "firstName", "phone", "email", "linkedin"],
 };
 const STATUSES = [
@@ -85,6 +108,24 @@ function shortSkills(list) {
   return items.length > 1 ? items.slice(0, -1).join(", ") + " and " + items[items.length - 1] : items.join("");
 }
 
+// "https://www.linkedin.com/in/x/" -> "linkedin.com/in/x": easier to read in an email.
+const shortUrl = (u) => String(u || "").trim().replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/$/, "");
+// "8.66" -> "a CGPA of 8.66/10", "82" -> "82%".
+function gpaText(g) {
+  const n = parseFloat(g);
+  if (!g || isNaN(n)) return "";
+  return n <= 10 ? `a CGPA of ${String(g).replace(/\s*\/\s*10$/, "")}/10` : `${n}%`;
+}
+// "a 2026 B.Tech graduate in Computer Science and Design from GEC Kozhikode, with a CGPA of 8.66/10",
+// built from whatever parts your first education entry has.
+function educationText(edu) {
+  if (!edu.degree && !edu.school) return "";
+  const graduated = edu.endYear && Number(edu.endYear) <= new Date().getFullYear();
+  const who = [edu.endYear, edu.degree, graduated || !edu.endYear ? "graduate" : "student"].filter(Boolean).join(" ");
+  return `a ${who}` + (edu.field ? ` in ${edu.field}` : "") + (edu.school ? ` from ${edu.school}` : "") +
+    (gpaText(edu.gpa) ? `, with ${gpaText(edu.gpa)}` : "");
+}
+
 function vars(row) {
   const P = profile.personal || {}, J = profile.job || {};
   const now = (profile.experience || []).find((e) => e.current) || {};
@@ -96,9 +137,11 @@ function vars(row) {
     position: row.role ? `the ${row.role} role` : "a suitable role",
     fullName: [P.firstName, P.lastName].filter(Boolean).map(titleCase).join(" "), firstName: titleCase(P.firstName),
     currentTitle: now.title, currentCompany: now.company, skills: shortSkills(J.skills), experience: J.totalExperience,
-    degree: edu.degree, field: edu.field, school: edu.school,
+    degree: edu.degree, field: edu.field, school: edu.school, gradYear: edu.endYear, gpa: gpaText(edu.gpa),
+    education: educationText(edu),
     phone: [P.phoneCountryCode, P.phone].filter(Boolean).join(" "), email: P.email,
-    linkedin: P.linkedin, github: P.github, portfolio: P.portfolio,
+    linkedin: shortUrl(P.linkedin), github: shortUrl(P.github), portfolio: shortUrl(P.portfolio),
+    workLinks: [P.portfolio, P.github].map(shortUrl).filter(Boolean).join(" and "),
     sentOn: niceDate(row.sentOn), firstSubject: first ? first.subject.replace(/^re:\s*/i, "") : "",
   };
 }
@@ -460,6 +503,7 @@ chrome.storage.local.get(["profile", "resume", "outreach"], (s) => {
     data = { templates: { ...structuredClone(DEFAULT_TEMPLATES), ...templates }, rows: s.outreach.rows || [] };
     // Upgrade the old intro line (dropped whenever a company had no role) if you haven't reworded it.
     data.templates.first.body = data.templates.first.body.replace(OLD_INTRO, "My name is {fullName}, and I'm writing to apply for {position} at {company}.");
+    if (data.templates.first.body.trim() === PREVIOUS_FIRST_BODY.trim()) data.templates.first = structuredClone(DEFAULT_TEMPLATES.first);
     data.templates.followup.body = data.templates.followup.body.replace("my application for the {role} role at {company}", "my application for {position} at {company}");
   }
   selected = data.rows[0] && data.rows[0].id;
