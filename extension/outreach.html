@@ -9,23 +9,32 @@
   body { font-family: system-ui, sans-serif; color: var(--t); background: #f9fafb; margin: 0; }
   main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
   h1 { font-size: 22px; margin: 0 0 4px; }
-  h2 { font-size: 16px; margin: 0 0 4px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  h2 { font-size: 16px; margin: 0 0 8px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
   p.sub { color: var(--m); margin: 0 0 16px; font-size: 14px; }
   .hint { color: var(--m); margin: 0 0 10px; font-size: 12px; line-height: 1.5; }
   section { background: #fff; border: 1px solid var(--b); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
   button { font: inherit; font-size: 13px; border: 1px solid var(--b); background: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
   button.primary { background: var(--a); color: #fff; border-color: var(--a); font-weight: 600; }
   button:disabled { opacity: .5; cursor: default; }
-  input, textarea { font: inherit; font-size: 14px; color: var(--t); padding: 8px; border: 1px solid var(--b); border-radius: 8px; box-sizing: border-box; width: 100%; }
+  input, textarea, select { font: inherit; font-size: 14px; color: var(--t); padding: 8px; border: 1px solid var(--b); border-radius: 8px; box-sizing: border-box; width: 100%; }
   textarea { resize: vertical; }
   #subject { margin-bottom: 8px; }
-  #body { min-height: 260px; line-height: 1.5; }
+  #body { min-height: 240px; line-height: 1.5; }
   code { background: #f3f4f6; border-radius: 4px; padding: 0 4px; font-size: 12px; cursor: pointer; }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
-  #paste { min-height: 80px; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+  .tab { border-radius: 999px; }
+  .tab.on { background: var(--t); color: #fff; border-color: var(--t); }
+  #paste { min-height: 70px; }
   #defaultRole { width: 220px; }
-  .wrap { border: 1px solid var(--b); border-radius: 10px; overflow-x: auto; margin-top: 12px; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 900px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+  .chip { border-radius: 999px; padding: 4px 12px; }
+  .chip b { margin-left: 4px; }
+  .chip.on { background: var(--t); color: #fff; border-color: var(--t); }
+  .chip.due:not(.on) { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+  #stats { margin-left: auto; font-size: 12px; color: var(--m); }
+  .wrap { border: 1px solid var(--b); border-radius: 10px; overflow-x: auto; margin-top: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 980px; }
   th { text-align: left; font-weight: 600; color: var(--m); font-size: 12px; padding: 8px; border-bottom: 1px solid var(--b); }
   td { padding: 4px 6px; border-bottom: 1px solid var(--b); vertical-align: middle; }
   tr:last-child td { border-bottom: 0; }
@@ -34,17 +43,24 @@
   td input:hover { border-color: var(--b); }
   td input:focus { border-color: var(--a); outline: none; background: #fff; }
   td input.bad { border-color: #dc2626; }
-  .company input { font-weight: 600; }
-  .status { font-size: 12px; font-weight: 600; white-space: nowrap; }
-  .st-sent { color: #16a34a; } .st-opened { color: #d97706; } .st-new { color: var(--m); }
+  td.company input { font-weight: 600; }
+  select.st { font-size: 12px; font-weight: 600; padding: 4px 6px; width: auto; }
+  .st-new, .st-opened { color: var(--m); } .st-sent, .st-followed { color: #2563eb; } .st-replied { color: #0d9488; }
+  .st-interview { color: #7c3aed; } .st-offer { color: #16a34a; } .st-rejected { color: #dc2626; } .st-noreply { color: #9ca3af; }
+  .when { display: block; font-size: 11px; color: var(--m); margin-top: 2px; white-space: nowrap; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; background: #fef3c7; color: #92400e; border-radius: 999px; padding: 1px 8px; margin-top: 3px; white-space: nowrap; }
   .acts { white-space: nowrap; text-align: right; }
   .acts button { padding: 4px 8px; font-size: 12px; }
   .acts .x { border: 0; color: var(--m); }
   .acts .x:hover { color: #dc2626; }
   .empty { padding: 24px; text-align: center; color: var(--m); font-size: 14px; }
-  #preview { white-space: pre-wrap; font-family: inherit; font-size: 14px; line-height: 1.5; background: #f9fafb; border: 1px solid var(--b); border-radius: 8px; padding: 12px; margin: 0; }
-  .meta { font-size: 13px; margin-bottom: 8px; }
+  .mail { border: 1px solid var(--b); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; background: #fff; }
+  .mail-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+  .mail-head .when { display: inline; }
+  .meta { font-size: 13px; margin-bottom: 4px; }
   .meta b { display: inline-block; min-width: 64px; color: var(--m); font-weight: 600; }
+  .mail .body { white-space: pre-wrap; font-family: inherit; font-size: 14px; line-height: 1.55; margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--b); }
+  .attach { font-size: 12px; color: var(--m); margin-top: 8px; }
   #resumeLine.missing { color: #b45309; }
   a { color: var(--a); }
 </style>
@@ -52,19 +68,19 @@
 <body>
 <main>
   <h1>Email companies</h1>
-  <p class="sub">Write your email once and send it to each company in Gmail, with your resume attached. You review every email and click Send yourself.</p>
+  <p class="sub">Write your emails once, send them to each company in Gmail with your resume attached, and track who replied. You review every email and click Send yourself.</p>
 
   <section>
-    <h2>1. Your email <button id="resetTemplate">Reset to default</button></h2>
-    <p class="hint">Click a placeholder to insert it. Lines whose placeholders are empty for a company are left out, so a missing note or HR name won't leave a gap.<br>
-      <span id="chips"></span></p>
+    <h2>1. Your emails <button id="resetTemplate">Reset to default</button></h2>
+    <div class="tabs"><button class="tab on" data-kind="first">First email</button><button class="tab" data-kind="followup">Follow-up</button></div>
+    <p class="hint"><span id="tplHint"></span> Click a placeholder to insert it. Lines whose placeholders are empty for a company are left out.<br><span id="chips"></span></p>
     <input id="subject" placeholder="Subject">
     <textarea id="body" placeholder="Email text"></textarea>
     <p class="hint" id="resumeLine"></p>
   </section>
 
   <section>
-    <h2>2. Companies <span class="row" style="margin:0"><button id="openNext" class="primary">Open next unsent in Gmail</button></span></h2>
+    <h2>2. Companies <button id="openNext" class="primary">Open next unsent in Gmail</button></h2>
     <p class="hint">Paste one company per line: <b>Company, HR email, Role</b> (role optional). Example: <i>Infilect, careers@infilect.com, Backend Intern</i></p>
     <textarea id="paste" placeholder="Acme Systems, hr@acme.com, Software Engineer&#10;Beta Labs, jobs@betalabs.in"></textarea>
     <div class="row">
@@ -72,25 +88,22 @@
       <button id="addRows">Add to list</button>
       <span id="addMsg" class="hint" style="margin:0"></span>
     </div>
+    <div class="chips"><span id="chips2" class="chips" style="margin:0"></span><span id="stats"></span></div>
     <div class="wrap">
       <table>
-        <thead><tr><th style="width:15%">Company</th><th style="width:19%">HR email</th><th style="width:15%">Role</th>
-          <th style="width:11%">HR name</th><th>Personal note <span title="One line about why this company. Used by {note}.">ⓘ</span></th>
-          <th style="width:80px">Status</th><th style="width:190px"></th></tr></thead>
+        <thead><tr><th style="width:14%">Company</th><th style="width:18%">HR email</th><th style="width:14%">Role</th>
+          <th style="width:10%">HR name</th><th>Personal note <span title="One line about why this company. Used by {note}.">ⓘ</span></th>
+          <th style="width:140px">Status</th><th style="width:200px"></th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
       <div class="empty" id="empty">No companies yet. Paste some above.</div>
     </div>
-    <p class="hint" style="margin-top:10px">Tip: send a handful a day and fill in the personal note. Many identical emails in a short time can land in spam.</p>
+    <p class="hint" style="margin-top:10px">Sent and follow-up dates are filled in when you click Send in Gmail. Set Replied, Interview, Offer or Rejected yourself when you hear back; Interview, Offer and Rejected also update My applications. Tip: send a handful a day with a personal note, since many identical emails can land in spam.</p>
   </section>
 
-  <section>
-    <h2>3. Preview <span class="row" style="margin:0"><button id="copy">Copy text</button><button id="openSel" class="primary">Open in Gmail</button></span></h2>
-    <div id="previewWrap">
-      <div class="meta"><b>To</b><span id="pvTo"></span></div>
-      <div class="meta"><b>Subject</b><span id="pvSubject"></span></div>
-      <pre id="preview"></pre>
-    </div>
+  <section id="messageWrap">
+    <h2><span id="msgTitle">3. Message</span> <span class="row" style="margin:0"><button id="copy">Copy text</button><button id="openSel" class="primary">Open in Gmail</button></span></h2>
+    <div id="message"></div>
   </section>
 </main>
 <script src="outreach.js"></script>

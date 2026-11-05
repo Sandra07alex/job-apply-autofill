@@ -1,11 +1,12 @@
-const DEFAULT_TEMPLATE = {
-  subject: "Application for {role} – {fullName}",
-  body: `Dear {hrName},
+const DEFAULT_TEMPLATES = {
+  first: {
+    subject: "Application for {role} – {fullName}",
+    body: `Dear {hrName},
 
 My name is {fullName}, and I'm writing to apply for the {role} role at {company}.
 {note}
 
-I currently work as {currentTitle} at {currentCompany}.
+I currently work at {currentCompany} as a {currentTitle}.
 I studied {degree} in {field} at {school}.
 My skills include {skills}.
 
@@ -17,17 +18,45 @@ Best regards,
 {email}
 {linkedin}
 {portfolio}`,
+  },
+  followup: {
+    subject: "Re: {firstSubject}",
+    body: `Dear {hrName},
+
+I'm following up on my application for the {role} role at {company}, which I sent on {sentOn}.
+I'm still very interested and happy to share anything else you need. I've attached my resume again for convenience.
+
+Thank you for your time.
+
+Best regards,
+{fullName}
+{phone}
+{email}`,
+  },
 };
-const PLACEHOLDERS = ["company", "role", "hrName", "note", "fullName", "firstName", "currentTitle", "currentCompany",
-  "skills", "experience", "degree", "field", "school", "phone", "email", "linkedin", "github", "portfolio"];
+const PLACEHOLDERS = {
+  first: ["company", "role", "hrName", "note", "fullName", "firstName", "currentTitle", "currentCompany",
+    "skills", "experience", "degree", "field", "school", "phone", "email", "linkedin", "github", "portfolio"],
+  followup: ["company", "role", "hrName", "sentOn", "firstSubject", "fullName", "firstName", "phone", "email", "linkedin"],
+};
+const STATUSES = [
+  ["new", "Not sent"], ["opened", "Draft opened"], ["sent", "Sent"], ["followed", "Followed up"],
+  ["replied", "Replied"], ["interview", "Interview"], ["offer", "Offer"], ["rejected", "Rejected"], ["noreply", "No response"],
+];
+const STATUS_LABEL = Object.fromEntries(STATUSES);
+// Statuses that also move the matching entry in "My applications".
+const TO_TRACKER = { interview: "Interview", offer: "Offer", rejected: "Rejected" };
+const FOLLOW_UP_DAYS = 7, MAX_FOLLOW_UPS = 2;
 const EMAIL_RE = /^[^\s@,;<>]+@[^\s@,;<>]+\.[a-z]{2,}$/i;
 
 let profile = {}, resume = null;
-let data = { template: { ...DEFAULT_TEMPLATE }, rows: [] };
-let selected = null;
+let data = { templates: structuredClone(DEFAULT_TEMPLATES), rows: [] };
+let selected = null, editing = "first", filter = "all";
 
 const $ = (id) => document.getElementById(id);
 const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+const daysSince = (iso) => (iso ? Math.floor((Date.parse(today()) - Date.parse(iso)) / 864e5) : 0);
+const niceDate = (iso) => (iso ? new Date(iso + "T00:00").toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }) : "");
 const save = () => chrome.storage.local.set({ outreach: data });
 
 function el(tag, props = {}, ...kids) {
@@ -37,37 +66,48 @@ function el(tag, props = {}, ...kids) {
   return e;
 }
 
-// ---------- Template ----------
+// ---------- Follow-ups ----------
+const lastContact = (r) => [r.sentOn, r.followedOn].filter(Boolean).sort().pop();
+const followUpDue = (r) => (r.status === "sent" || r.status === "followed") &&
+  (r.followUps || 0) < MAX_FOLLOW_UPS && daysSince(lastContact(r)) >= FOLLOW_UP_DAYS;
+const nextKind = (r) => (r.status === "new" || r.status === "opened" ? "first" : "followup");
+
+// ---------- Templates ----------
+const titleCase = (s) => (s && s === s.toUpperCase() ? s.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase()) : s);
+
 function vars(row) {
   const P = profile.personal || {}, J = profile.job || {};
   const now = (profile.experience || []).find((e) => e.current) || {};
   const edu = (profile.education || [])[0] || {};
+  const first = (row.history || []).find((h) => h.kind === "first");
   return {
     company: row.company, role: row.role, hrName: row.hrName || "Hiring Team", note: row.note,
-    fullName: [P.firstName, P.lastName].filter(Boolean).join(" "), firstName: P.firstName,
+    fullName: [P.firstName, P.lastName].filter(Boolean).map(titleCase).join(" "), firstName: titleCase(P.firstName),
     currentTitle: now.title, currentCompany: now.company, skills: J.skills, experience: J.totalExperience,
     degree: edu.degree, field: edu.field, school: edu.school,
     phone: [P.phoneCountryCode, P.phone].filter(Boolean).join(" "), email: P.email,
     linkedin: P.linkedin, github: P.github, portfolio: P.portfolio,
+    sentOn: niceDate(row.sentOn), firstSubject: first ? first.subject.replace(/^re:\s*/i, "") : "",
   };
 }
 
 // Drops any line with an empty placeholder; unknown {words} are left as typed.
+// "a {currentTitle}" becomes "an" before a vowel ("an Engineer").
 function render(text, v) {
   return text.split("\n")
     .filter((line) => [...line.matchAll(/\{(\w+)\}/g)].every((m) => !(m[1] in v) || v[m[1]]))
-    .map((line) => line.replace(/\{(\w+)\}/g, (all, k) => (k in v ? v[k] : all)))
+    .map((line) => line.replace(/(\ba )?\{(\w+)\}/gi, (all, article, k) => {
+      if (!(k in v)) return all;
+      const val = String(v[k]);
+      return article ? (/^[aeiou]/i.test(val) ? article.replace(/a/i, (x) => x + "n") : article) + val : val;
+    }))
     .join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-function emailFor(row) {
-  const v = vars(row);
-  const name = v.fullName || "";
-  return {
-    to: row.email,
-    subject: render(data.template.subject, v) || `Job application${name ? " – " + name : ""}`,
-    body: render(data.template.body, v),
-  };
+function emailFor(row, kind = nextKind(row)) {
+  const v = vars(row), t = data.templates[kind];
+  const fallback = kind === "first" ? `Job application${v.fullName ? " – " + v.fullName : ""}` : `Following up on my application – ${v.fullName}`;
+  return { kind, to: row.email, subject: render(t.subject, v) || fallback, body: render(t.body, v) };
 }
 
 // ---------- Opening in Gmail ----------
@@ -78,14 +118,15 @@ function gmailUrl(mail) {
 
 async function openInGmail(row) {
   if (!EMAIL_RE.test(row.email || "")) { alert(`Check the email address for ${row.company || "this company"}.`); return; }
-  if (row.status === "sent" && !confirm(`You already emailed ${row.company} on ${row.sentOn}. Open it again?`)) return;
   const mail = emailFor(row);
+  if (mail.kind === "followup" && !confirm(`Open a follow-up email to ${row.company || row.email}?`)) return;
   const tab = await chrome.tabs.create({ url: gmailUrl(mail) });
   // The background script attaches the resume once Gmail has loaded in this tab.
-  await chrome.storage.session.set({ ["outreach-" + tab.id]: { id: row.id, company: row.company, role: row.role, email: row.email } });
-  if (row.status !== "sent") row.status = "opened";
+  await chrome.storage.session.set({ ["outreach-" + tab.id]: {
+    id: row.id, company: row.company, role: row.role, email: row.email, kind: mail.kind, subject: mail.subject, body: mail.body } });
+  if (row.status === "new") row.status = "opened";
   save();
-  renderRows();
+  renderAll();
 }
 
 // ---------- Companies list ----------
@@ -107,7 +148,8 @@ function addRows() {
   for (const r of found) {
     const same = data.rows.find((x) => x.email.toLowerCase() === r.email.toLowerCase() && (x.role || "") === (r.role || ""));
     if (same) { dupes++; continue; }
-    data.rows.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), hrName: "", note: "", status: "new", sentOn: "", ...r });
+    data.rows.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), hrName: "", note: "",
+      status: "new", sentOn: "", followedOn: "", followUps: 0, history: [], added: today(), ...r });
     added++;
   }
   save();
@@ -116,104 +158,203 @@ function addRows() {
     : "No email addresses found. Use: Company, email, Role";
   if (added) $("paste").value = "";
   if (!selected && data.rows.length) selected = data.rows[0].id;
-  renderRows();
-  renderPreview();
+  filter = "all";
+  renderAll();
 }
 
-function cell(row, key, cls, placeholder) {
+function setStatus(row, status) {
+  row.status = status;
+  save();
+  const to = TO_TRACKER[status];
+  if (!to) return;
+  const key = `email:${row.email.toLowerCase()}:${row.role || ""}`;
+  chrome.storage.local.get("applications", ({ applications }) => {
+    const app = (applications || []).find((a) => a.key === key);
+    if (app && app.status !== to) {
+      Object.assign(app, { status: to, updated: today() });
+      chrome.storage.local.set({ applications });
+    }
+  });
+}
+
+function cell(row, key, placeholder) {
   const input = el("input", { value: row[key] || "", placeholder });
   if (key === "email") input.classList.toggle("bad", !!row.email && !EMAIL_RE.test(row.email));
-  input.onfocus = () => { selected = row.id; markSelected(); renderPreview(); };
+  input.onfocus = () => select(row.id);
   input.oninput = () => {
     row[key] = input.value.trim();
     if (key === "email") input.classList.toggle("bad", !!row.email && !EMAIL_RE.test(row.email));
     save();
-    renderPreview();
+    renderMessage();
   };
-  return el("td", { className: cls }, input);
+  return el("td", { className: key }, input);
 }
 
-const STATUS_TEXT = { new: "Not sent", opened: "Opened", sent: "Sent" };
-
 function rowEl(row) {
-  const status = el("td", { className: "status st-" + row.status, textContent: STATUS_TEXT[row.status] || row.status,
-    title: row.sentOn ? `Sent on ${row.sentOn}` : "" });
-  const open = el("button", { className: "primary", textContent: "Open in Gmail" });
-  open.onclick = () => openInGmail(row);
-  const preview = el("button", { textContent: "Preview" });
-  preview.onclick = () => { selected = row.id; markSelected(); renderPreview(); $("previewWrap").scrollIntoView({ behavior: "smooth" }); };
+  const status = el("select", { className: "st st-" + row.status });
+  for (const [v, label] of STATUSES) status.appendChild(el("option", { value: v, textContent: label, selected: row.status === v }));
+  status.onfocus = () => select(row.id);
+  status.onchange = () => { setStatus(row, status.value); renderAll(); };
+  const statusCell = el("td", {}, status);
+  const when = lastContact(row);
+  if (when) statusCell.appendChild(el("div", { className: "when", textContent: (row.followedOn ? "Followed up " : "Sent ") + niceDate(when) }));
+  if (followUpDue(row)) statusCell.appendChild(el("span", { className: "badge", textContent: `No reply in ${daysSince(when)} days` }));
+
+  const kind = nextKind(row);
+  const open = el("button", { className: kind === "first" || followUpDue(row) ? "primary" : "",
+    textContent: kind === "first" ? "Open in Gmail" : "Follow up" });
+  open.onclick = () => { select(row.id); openInGmail(row); };
+  if (["replied", "interview", "offer", "rejected", "noreply"].includes(row.status)) open.disabled = true;
+  const view = el("button", { textContent: "Message" });
+  view.onclick = () => { select(row.id); $("messageWrap").scrollIntoView({ behavior: "smooth" }); };
   const del = el("button", { className: "x", title: "Remove", textContent: "✕" });
   del.onclick = () => {
+    if (row.history && row.history.length && !confirm(`Remove ${row.company || row.email} and its email history?`)) return;
     data.rows = data.rows.filter((r) => r !== row);
     if (selected === row.id) selected = data.rows[0] && data.rows[0].id;
-    save(); renderRows(); renderPreview();
+    save(); renderAll();
   };
   const tr = el("tr", {},
-    cell(row, "company", "company", "Company"), cell(row, "email", "email", "hr@company.com"),
-    cell(row, "role", "", "Role"), cell(row, "hrName", "", "Hiring Team"),
-    cell(row, "note", "", "Why this company (optional)"),
-    status, el("td", { className: "acts" }, preview, " ", open, " ", del));
+    cell(row, "company", "Company"), cell(row, "email", "hr@company.com"), cell(row, "role", "Role"),
+    cell(row, "hrName", "Hiring Team"), cell(row, "note", "Why this company (optional)"),
+    statusCell, el("td", { className: "acts" }, view, " ", open, " ", del));
   tr.dataset.id = row.id;
+  tr.onclick = (e) => { if (e.target === tr || e.target.tagName === "TD") select(row.id); };
   return tr;
 }
 
-function markSelected() {
+function select(id) {
+  if (selected === id) return;
+  selected = id;
   document.querySelectorAll("#rows tr").forEach((tr) => tr.classList.toggle("sel", tr.dataset.id === selected));
+  renderMessage();
+}
+
+const FILTERS = [
+  ["all", "All", () => true],
+  ["new", "Not sent", (r) => r.status === "new" || r.status === "opened"],
+  ["due", "Follow up due", followUpDue],
+  ["waiting", "Waiting for reply", (r) => r.status === "sent" || r.status === "followed"],
+  ["replied", "Replied", (r) => ["replied", "interview", "offer"].includes(r.status)],
+  ["closed", "Rejected / no response", (r) => r.status === "rejected" || r.status === "noreply"],
+];
+
+function renderChips() {
+  const box = $("chips2");
+  box.innerHTML = "";
+  for (const [key, label, test] of FILTERS) {
+    const n = data.rows.filter(test).length;
+    if (key !== "all" && !n) continue;
+    const b = el("button", { className: "chip" + (filter === key ? " on" : "") + (key === "due" ? " due" : "") }, label, el("b", { textContent: n }));
+    b.onclick = () => { filter = filter === key ? "all" : key; renderRows(); renderChips(); };
+    box.appendChild(b);
+  }
+  const sent = data.rows.filter((r) => r.sentOn).length;
+  const replied = data.rows.filter((r) => ["replied", "interview", "offer", "rejected"].includes(r.status)).length;
+  $("stats").textContent = sent ? `${sent} sent · ${replied} replied (${Math.round((replied / sent) * 100)}%)` : "";
 }
 
 function renderRows() {
+  const test = (FILTERS.find((f) => f[0] === filter) || FILTERS[0])[2];
+  // Follow-ups due first, then unsent, then the rest by last contact.
+  const rank = (r) => (followUpDue(r) ? 0 : r.status === "new" || r.status === "opened" ? 1 : 2);
+  const shown = data.rows.filter(test).sort((a, b) => rank(a) - rank(b) || (lastContact(b) || "").localeCompare(lastContact(a) || ""));
   const tbody = $("rows");
   tbody.innerHTML = "";
-  data.rows.forEach((r) => tbody.appendChild(rowEl(r)));
-  $("empty").hidden = data.rows.length > 0;
-  $("openNext").disabled = !data.rows.some((r) => r.status !== "sent");
-  markSelected();
+  shown.forEach((r) => tbody.appendChild(rowEl(r)));
+  document.querySelectorAll("#rows tr").forEach((tr) => tr.classList.toggle("sel", tr.dataset.id === selected));
+  $("empty").hidden = shown.length > 0;
+  $("empty").textContent = data.rows.length ? "Nothing in this filter." : "No companies yet. Paste some above.";
+  const next = nextToOpen();
+  $("openNext").disabled = !next;
+  $("openNext").textContent = next && nextKind(next) === "followup" ? "Open next follow-up in Gmail" : "Open next unsent in Gmail";
 }
 
-function renderPreview() {
+const nextToOpen = () => data.rows.find((r) => r.status === "new") || data.rows.find(followUpDue) || data.rows.find((r) => r.status === "opened");
+
+// ---------- Message panel: what will be sent, and what was sent ----------
+function mailBox(title, mail, note) {
+  return el("div", { className: "mail" },
+    el("div", { className: "mail-head" }, el("b", { textContent: title }), note ? el("span", { className: "when", textContent: note }) : ""),
+    el("div", { className: "meta" }, el("b", { textContent: "To" }), mail.to || ""),
+    el("div", { className: "meta" }, el("b", { textContent: "Subject" }), mail.subject || ""),
+    el("pre", { className: "body", textContent: mail.body || "" }),
+    resume && title !== "Sent" ? el("div", { className: "attach", textContent: "📎 " + resume.name }) : "");
+}
+
+function renderMessage() {
   const row = data.rows.find((r) => r.id === selected);
-  const sample = row || { company: "Acme Systems", email: "hr@acme.com", role: data.rows.length ? "" : "Software Engineer" };
-  const mail = emailFor(sample);
-  $("pvTo").textContent = row ? mail.to : "(example) hr@acme.com";
-  $("pvSubject").textContent = mail.subject;
-  $("preview").textContent = mail.body;
-  $("openSel").disabled = !row;
-  $("copy").disabled = !row;
+  const box = $("message");
+  box.innerHTML = "";
+  if (!row) {
+    $("msgTitle").textContent = "3. Message";
+    box.appendChild(mailBox("Example", emailFor({ company: "Acme Systems", email: "hr@acme.com", role: "Software Engineer", history: [] }, "first")));
+    $("openSel").disabled = $("copy").disabled = true;
+    return;
+  }
+  $("msgTitle").textContent = `3. Message – ${row.company || row.email}`;
+  const done = ["replied", "interview", "offer", "rejected", "noreply"].includes(row.status);
+  if (!done) {
+    const mail = emailFor(row);
+    box.appendChild(mailBox(mail.kind === "first" ? "Will send" : "Follow-up (will send)", mail,
+      mail.kind === "followup" && !followUpDue(row) ? `Best sent after ${FOLLOW_UP_DAYS} days without a reply` : ""));
+  }
+  for (const h of [...(row.history || [])].reverse()) {
+    box.appendChild(mailBox("Sent", { to: row.email, subject: h.subject, body: h.body },
+      `${h.kind === "followup" ? "Follow-up" : "First email"} · ${niceDate(h.on)}`));
+  }
+  if (done && !(row.history || []).length) box.appendChild(el("p", { className: "hint", textContent: "No emails sent from here yet." }));
+  $("openSel").disabled = done;
+  $("openSel").textContent = nextKind(row) === "first" ? "Open in Gmail" : "Follow up in Gmail";
+  $("copy").disabled = done;
+}
+
+function renderAll() {
+  renderChips();
+  renderRows();
+  renderMessage();
 }
 
 // ---------- Template editor ----------
 function renderTemplate() {
-  $("subject").value = data.template.subject;
-  $("body").value = data.template.body;
+  const t = data.templates[editing];
+  $("subject").value = t.subject;
+  $("body").value = t.body;
+  document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("on", b.dataset.kind === editing));
+  $("tplHint").textContent = editing === "first"
+    ? "Your first email to each company."
+    : `Sent when a company hasn't replied after ${FOLLOW_UP_DAYS} days. Gmail can't thread it, so the subject starts with "Re:".`;
+  const chips = $("chips");
+  chips.innerHTML = "";
+  for (const p of PLACEHOLDERS[editing]) {
+    const c = el("code", { textContent: `{${p}}`, title: "Insert" });
+    c.onclick = () => {
+      const f = lastField || $("body");
+      const at = f.selectionStart ?? f.value.length;
+      f.value = f.value.slice(0, at) + `{${p}}` + f.value.slice(f.selectionEnd ?? at);
+      f.focus();
+      f.selectionStart = f.selectionEnd = at + p.length + 2;
+      f.dispatchEvent(new Event("input"));
+    };
+    chips.append(c, " ");
+  }
 }
 let lastField = null;
 for (const id of ["subject", "body"]) {
   $(id).addEventListener("focus", () => (lastField = $(id)));
-  $(id).addEventListener("input", () => { data.template[id] = $(id).value; save(); renderPreview(); });
+  $(id).addEventListener("input", () => { data.templates[editing][id] = $(id).value; save(); renderMessage(); });
 }
-const chips = $("chips");
-for (const p of PLACEHOLDERS) {
-  const c = el("code", { textContent: `{${p}}`, title: "Insert" });
-  c.onclick = () => {
-    const f = lastField || $("body");
-    const at = f.selectionStart ?? f.value.length;
-    f.value = f.value.slice(0, at) + `{${p}}` + f.value.slice(f.selectionEnd ?? at);
-    f.focus();
-    f.selectionStart = f.selectionEnd = at + p.length + 2;
-    f.dispatchEvent(new Event("input"));
-  };
-  chips.append(c, " ");
-}
+document.querySelectorAll(".tab").forEach((b) => (b.onclick = () => { editing = b.dataset.kind; renderTemplate(); }));
 $("resetTemplate").onclick = () => {
-  if (!confirm("Replace your email text with the default?")) return;
-  data.template = { ...DEFAULT_TEMPLATE };
-  save(); renderTemplate(); renderPreview();
+  if (!confirm(`Replace your ${editing === "first" ? "first email" : "follow-up"} text with the default?`)) return;
+  data.templates[editing] = structuredClone(DEFAULT_TEMPLATES[editing]);
+  save(); renderTemplate(); renderMessage();
 };
 
 $("addRows").onclick = addRows;
 $("openNext").onclick = () => {
-  const next = data.rows.find((r) => r.status === "new") || data.rows.find((r) => r.status !== "sent");
-  if (next) { selected = next.id; renderPreview(); openInGmail(next); }
+  const next = nextToOpen();
+  if (next) { select(next.id); openInGmail(next); }
 };
 $("openSel").onclick = () => { const r = data.rows.find((x) => x.id === selected); if (r) openInGmail(r); };
 $("copy").onclick = async () => {
@@ -240,24 +381,31 @@ function renderResumeLine() {
 // Gmail marks rows as sent from another tab.
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
-  if (changes.resume) { resume = changes.resume.newValue || null; renderResumeLine(); }
+  if (changes.resume) { resume = changes.resume.newValue || null; renderResumeLine(); renderMessage(); }
   if (changes.outreach && changes.outreach.newValue) {
     const fresh = changes.outreach.newValue.rows || [];
+    let changed = false;
     for (const r of data.rows) {
       const f = fresh.find((x) => x.id === r.id);
-      if (f && f.status !== r.status) { r.status = f.status; r.sentOn = f.sentOn; }
+      if (f && (f.status !== r.status || (f.history || []).length !== (r.history || []).length)) {
+        Object.assign(r, { status: f.status, sentOn: f.sentOn, followedOn: f.followedOn, followUps: f.followUps, history: f.history });
+        changed = true;
+      }
     }
-    if (!document.activeElement || !document.activeElement.closest("#rows")) renderRows();
+    if (changed && (!document.activeElement || !document.activeElement.closest("#rows, #subject, #body"))) renderAll();
   }
 });
 
 chrome.storage.local.get(["profile", "resume", "outreach"], (s) => {
   profile = s.profile || {};
   resume = s.resume || null;
-  if (s.outreach) data = { template: s.outreach.template || { ...DEFAULT_TEMPLATE }, rows: s.outreach.rows || [] };
+  if (s.outreach) {
+    // Earlier versions kept one template under "template".
+    const templates = s.outreach.templates || { first: s.outreach.template || DEFAULT_TEMPLATES.first };
+    data = { templates: { ...structuredClone(DEFAULT_TEMPLATES), ...templates }, rows: s.outreach.rows || [] };
+  }
   selected = data.rows[0] && data.rows[0].id;
   renderTemplate();
   renderResumeLine();
-  renderRows();
-  renderPreview();
+  renderAll();
 });

@@ -64,7 +64,22 @@
     const s = await getStore(["outreach", "applications"]);
     const outreach = s.outreach || { rows: [] };
     const row = (outreach.rows || []).find((r) => r.id === job.id);
-    if (row) { row.status = "sent"; row.sentOn = today(); }
+    if (row) {
+      // Keep what was actually sent, including any edits you made in Gmail.
+      const subjectBox = document.querySelector("input[name='subjectbox']");
+      row.history = (row.history || []).concat({ kind: job.kind || "first", on: today(),
+        subject: (subjectBox && subjectBox.value) || job.subject || "", body: (body.innerText || "").trim() || job.body || "" });
+      if (job.kind === "followup") {
+        row.status = "followed"; row.followedOn = today(); row.followUps = (row.followUps || 0) + 1;
+      } else {
+        row.status = "sent"; row.sentOn = today();
+      }
+    }
+    if (job.kind === "followup") {
+      await setStore({ outreach });
+      toast(`Follow-up to ${job.company || job.email} saved in your email tracker.`);
+      return;
+    }
     // Also log it in "My applications", once per address and role.
     const apps = s.applications || [];
     const key = `email:${job.email.toLowerCase()}:${job.role || ""}`;
@@ -73,7 +88,7 @@
         status: "Applied", created: today(), updated: today(), appliedOn: today(), notes: `Emailed ${job.email}` });
     }
     await setStore({ outreach, applications: apps });
-    toast(`Marked ${job.company || job.email} as emailed and added it to My applications.`);
+    toast(`Marked ${job.company || job.email} as sent in your email tracker and added it to My applications.`);
   }
   // Send button (its tooltip/label starts with "Send"), or Ctrl/Cmd+Enter.
   document.addEventListener("click", (e) => {
