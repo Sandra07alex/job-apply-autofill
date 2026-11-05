@@ -12,6 +12,7 @@ overwriteEl.addEventListener("change", () => {
 
 document.getElementById("edit").addEventListener("click", () => chrome.runtime.openOptionsPage());
 document.getElementById("apps").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("tracker.html") }));
+document.getElementById("mail").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("outreach.html") }));
 
 document.getElementById("fill").addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

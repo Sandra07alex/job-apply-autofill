@@ -17,6 +17,7 @@ Applying to jobs means entering identical information dozens of times across dif
 - **Resume upload:** attaches your saved resume to "Resume / CV" upload boxes
 - **Adds blocks:** clicks "Add" until there's an education / experience block for every profile entry
 - **Application tracker:** every job you fill is logged (company, role, link, date) and marked Applied when you submit. Track interviews, offers and rejections, get "Follow up" reminders after 10 quiet days, and export to CSV
+- **Email companies:** write one email with placeholders ({company}, {role}, {note}…), paste a list of companies and HR emails, and open each one as a ready Gmail draft with your resume attached. You click Send; it is then marked sent and added to the tracker
 - **Workday pickers:** opens "Select One" lists and picks from School / Skills search suggestions
 - **One click or one shortcut** (`Alt+Shift+F`) to fill the current page
 - **Repeated sections:** fills Experience 1, Experience 2, Education 1 and so on with the right entry
@@ -50,12 +51,15 @@ extension/
   popup.html/js   The toolbar popup (Fill button, overwrite toggle)
   options.html/js The profile editor page
   tracker.html/js The "My applications" tracker page
+  outreach.html/js The "Email companies" page (template, company list, preview)
+  gmail.js        Runs in the Gmail draft: attaches your resume, notices Send
   resume.js       Turns pasted resume text into a profile
   fill.js         The core: reads each form field, decides what it's asking for, fills it
   background.js   Keyboard shortcut handler
 tests/
   fill.test.js    Runs fill.js against mock LinkedIn, Workday and Keka forms in headless Chromium
   resume.test.js  Checks the resume parser on sample resumes
+  gmail.test.js   Runs gmail.js against mock Gmail compose windows
 ```
 
 ### How `fill.js` works
