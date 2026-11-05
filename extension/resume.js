@@ -173,7 +173,8 @@
   }
 
   function parseResume(text) {
-    const lines = String(text || "").split(/\r?\n/).map((l) => l.replace(/ /g, " ").trim()).filter(Boolean);
+    // Text copied from Markdown/PDF tools can carry escapes like "TensorFlow\.js".
+    const lines = String(text || "").split(/\r?\n/).map((l) => l.replace(/ /g, " ").replace(/\\(?=[^\w\s])/g, "").trim()).filter(Boolean);
     const parts = { top: [], education: [], experience: [], skills: [], other: [] };
     let at = "top";
     for (const l of lines) {

@@ -3,7 +3,7 @@ const DEFAULT_TEMPLATES = {
     subject: "Application for {role} – {fullName}",
     body: `Dear {hrName},
 
-My name is {fullName}, and I'm writing to apply for the {role} role at {company}.
+My name is {fullName}, and I'm writing to apply for {position} at {company}.
 {note}
 
 I currently work at {currentCompany} as a {currentTitle}.
@@ -23,7 +23,7 @@ Best regards,
     subject: "Re: {firstSubject}",
     body: `Dear {hrName},
 
-I'm following up on my application for the {role} role at {company}, which I sent on {sentOn}.
+I'm following up on my application for {position} at {company}, which I sent on {sentOn}.
 I'm still very interested and happy to share anything else you need. I've attached my resume again for convenience.
 
 Thank you for your time.
@@ -34,10 +34,13 @@ Best regards,
 {email}`,
   },
 };
+// The intro line of the first default, before {position}. Saved templates still equal to it get upgraded.
+const OLD_INTRO = "My name is {fullName}, and I'm writing to apply for the {role} role at {company}.";
+const SKILLS_IN_EMAIL = 8;
 const PLACEHOLDERS = {
-  first: ["company", "role", "hrName", "note", "fullName", "firstName", "currentTitle", "currentCompany",
+  first: ["company", "position", "role", "hrName", "note", "fullName", "firstName", "currentTitle", "currentCompany",
     "skills", "experience", "degree", "field", "school", "phone", "email", "linkedin", "github", "portfolio"],
-  followup: ["company", "role", "hrName", "sentOn", "firstSubject", "fullName", "firstName", "phone", "email", "linkedin"],
+  followup: ["company", "position", "role", "hrName", "sentOn", "firstSubject", "fullName", "firstName", "phone", "email", "linkedin"],
 };
 const STATUSES = [
   ["new", "Not sent"], ["opened", "Draft opened"], ["sent", "Sent"], ["followed", "Followed up"],
@@ -75,6 +78,13 @@ const nextKind = (r) => (r.status === "new" || r.status === "opened" ? "first" :
 // ---------- Templates ----------
 const titleCase = (s) => (s && s === s.toUpperCase() ? s.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase()) : s);
 
+// A long skills list reads like keyword stuffing in an email: keep the first few
+// ("Python, C, Java and React"). Also drops stray "\" left by pasting Markdown ("TensorFlow\.js").
+function shortSkills(list) {
+  const items = String(list || "").replace(/\\(?=[^\w\s])/g, "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, SKILLS_IN_EMAIL);
+  return items.length > 1 ? items.slice(0, -1).join(", ") + " and " + items[items.length - 1] : items.join("");
+}
+
 function vars(row) {
   const P = profile.personal || {}, J = profile.job || {};
   const now = (profile.experience || []).find((e) => e.current) || {};
@@ -82,8 +92,10 @@ function vars(row) {
   const first = (row.history || []).find((h) => h.kind === "first");
   return {
     company: row.company, role: row.role, hrName: row.hrName || "Hiring Team", note: row.note,
+    // Works with or without a role, so the opening line is never dropped.
+    position: row.role ? `the ${row.role} role` : "a suitable role",
     fullName: [P.firstName, P.lastName].filter(Boolean).map(titleCase).join(" "), firstName: titleCase(P.firstName),
-    currentTitle: now.title, currentCompany: now.company, skills: J.skills, experience: J.totalExperience,
+    currentTitle: now.title, currentCompany: now.company, skills: shortSkills(J.skills), experience: J.totalExperience,
     degree: edu.degree, field: edu.field, school: edu.school,
     phone: [P.phoneCountryCode, P.phone].filter(Boolean).join(" "), email: P.email,
     linkedin: P.linkedin, github: P.github, portfolio: P.portfolio,
@@ -123,7 +135,7 @@ async function openInGmail(row) {
   const tab = await chrome.tabs.create({ url: gmailUrl(mail) });
   // The background script attaches the resume once Gmail has loaded in this tab.
   await chrome.storage.session.set({ ["outreach-" + tab.id]: {
-    id: row.id, company: row.company, role: row.role, email: row.email, kind: mail.kind, subject: mail.subject, body: mail.body } });
+    id: row.id, company: row.company, role: row.role, email: row.email, kind: mail.kind, subject: mail.subject, body: mail.body, at: Date.now() } });
   if (row.status === "new") row.status = "opened";
   save();
   renderAll();
@@ -403,6 +415,9 @@ chrome.storage.local.get(["profile", "resume", "outreach"], (s) => {
     // Earlier versions kept one template under "template".
     const templates = s.outreach.templates || { first: s.outreach.template || DEFAULT_TEMPLATES.first };
     data = { templates: { ...structuredClone(DEFAULT_TEMPLATES), ...templates }, rows: s.outreach.rows || [] };
+    // Upgrade the old intro line (dropped whenever a company had no role) if you haven't reworded it.
+    data.templates.first.body = data.templates.first.body.replace(OLD_INTRO, "My name is {fullName}, and I'm writing to apply for {position} at {company}.");
+    data.templates.followup.body = data.templates.followup.body.replace("my application for the {role} role at {company}", "my application for {position} at {company}");
   }
   selected = data.rows[0] && data.rows[0].id;
   renderTemplate();
