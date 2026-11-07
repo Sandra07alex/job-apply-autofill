@@ -335,11 +335,10 @@ function cell(row, key, placeholder) {
   return el("td", { className: key }, input);
 }
 
-// ---------- Suggested personal notes, from the company's own website ----------
-// The site comes from the HR email's domain (hr@algominds.live -> algominds.live). The
-// suggestion is built from the site's title and description; you review it before sending.
+// ---------- Suggested personal notes, from researching the company's own website ----------
+// The site comes from the HR email's domain (hr@algominds.live -> algominds.live). research.js
+// reads a few of its pages and suggests notes linking the company to your profile; you pick one.
 const FREE_MAIL = /^(gmail|googlemail|yahoo|ymail|outlook|hotmail|live|msn|icloud|me|aol|rediffmail|proton(mail)?|gmx|yandex|mail|zohomail)\./i;
-const KEEP_CASE = new Set(["india", "indian", "kerala", "kochi", "bangalore", "bengaluru", "london", "europe", "us", "uk"]);
 
 function companySite(row) {
   if (row.website) return row.website.replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
@@ -347,46 +346,48 @@ function companySite(row) {
   return domain && !FREE_MAIL.test(domain) ? domain.toLowerCase() : "";
 }
 
-// "Image Recognition Powered Retail Analytics" -> "image recognition powered retail analytics";
-// acronyms (AI, IT) and place names keep their capitals.
-const softLower = (s) => s.replace(/\b([A-Z][a-z]+)\b/g, (w) => (KEEP_CASE.has(w.toLowerCase()) ? w : w.toLowerCase()));
-const FLUFF = /^(best|leading|#1|top|official site|home|welcome( to)?|the)\b\s*/i;
-
-// What the company does, in a few words, or "" if the site doesn't say anything useful.
-function whatTheyDo(title, desc, company, site) {
-  const names = [company, site.split(".")[0]].filter(Boolean).map((n) => n.toLowerCase().replace(/[^a-z0-9]/g, ""));
-  const isName = (seg) => { const n = seg.toLowerCase().replace(/[^a-z0-9]/g, ""); return !n || names.some((x) => x && (n.includes(x) || x.includes(n))); };
-  const segs = String(title || "").split(/\s+[|–—:-]\s+|\s*:\s+/).map((s) => s.trim().replace(FLUFF, "")).filter((s) => s && !isName(s));
-  const good = segs.filter((s) => { const w = s.split(/\s+/).length; return w >= 2 && w <= 10; });
-  if (good.length) return softLower(good.slice(0, 2).join(" and "));
-  // "Algominds is a London-based software engineering ... company helping ..." -> the part after "is a"
-  const m = String(desc || "").match(/\bis (?:a|an|the)\s+(.{8,140}?)\s+(?:company|provider|platform|firm|partner|leader|startup|agency)\b/i);
-  return m ? softLower(m[1].replace(FLUFF, "")) : "";
-}
-
 async function suggestNote(row, { overwrite = false } = {}) {
   const site = companySite(row);
   if (!site) return { ok: false, why: "no company website (personal email address); add the note yourself" };
-  let html;
-  try {
-    const r = await fetch("https://" + site, { signal: AbortSignal.timeout(15000) });
-    if (!r.ok) return { ok: false, why: `${site} answered ${r.status}` };
-    html = await r.text();
-  } catch (e) {
-    return { ok: false, why: `couldn't open ${site}` };
-  }
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  const meta = (sel) => (doc.querySelector(sel) || {}).content || "";
-  const title = (doc.querySelector("title") || {}).textContent || meta("meta[property='og:title']");
-  const desc = meta("meta[name='description']") || meta("meta[property='og:description']");
-  const what = whatTheyDo(title.trim(), desc.trim(), row.company, site);
-  row.noteSource = { site, title: title.trim().slice(0, 200), desc: desc.trim().slice(0, 300) };
-  if (!what) { save(); return { ok: false, why: `${site} doesn't say clearly what they do; see its description in Message` }; }
-  // A product ("online brokerage platform ...") reads as "your ..."; a field as "your work in ...".
-  const product = /\b(platform|app|application|product|tool|marketplace|exchange|software for)\b/i.test(what);
-  if (!row.note || overwrite) row.note = product ? `of your ${what}.` : `of your work in ${what}.`;
+  const r = await CompanyResearch.research({ site, company: row.company, profile });
+  if (!r.ok) return { ok: false, why: r.why };
+  row.research = { site, at: Date.now(), facts: r.facts, ideas: r.ideas };
+  delete row.noteSource;
+  if (!r.ideas.length) { save(); return { ok: false, why: `${site} doesn't say enough about what they do` }; }
+  if (!row.note || overwrite) row.note = r.ideas[0].text;
   save();
   return { ok: true };
+}
+
+// The research box under the email: note ideas to pick from, and the facts behind them.
+const IDEA_LABEL = { product: "Their product", services: "What they do", tech: "Same tech as you", news: "Recent news", local: "Kerala team", mission: "Their mission", about: "About them" };
+function researchBox(row) {
+  const r = row.research;
+  const box = el("div", { className: "source" });
+  box.append(el("b", { textContent: `Note ideas from ${r.site}` }), " (click Use, then make it your own):");
+  for (const idea of r.ideas) {
+    const use = el("button", { textContent: row.note === idea.text ? "Using" : "Use", disabled: row.note === idea.text });
+    use.onclick = () => { row.note = idea.text; save(); renderRows(); renderMessage(); };
+    box.append(el("div", { className: "idea" }, el("span", { className: "kind", textContent: IDEA_LABEL[idea.kind] || idea.kind }),
+      el("span", { textContent: `…because ${idea.text}` }), use));
+  }
+  const f = r.facts;
+  const facts = [
+    f.products.length && "Products: " + f.products.map((p) => p.name + (p.what ? ` (${p.what})` : "")).join("; "),
+    f.services.length && "Services: " + f.services.join(", "),
+    f.industries.length && "Industries: " + f.industries.join(", "),
+    f.tech.length && "Tech mentioned: " + f.tech.join(", ") + (f.techOverlap.length ? ` (you know ${f.techOverlap.join(", ")})` : ""),
+    f.news.length && "News: " + f.news.join("; "),
+    f.place && "Kerala: " + f.place,
+    f.mission && "Mission: " + f.mission,
+    !f.products.length && !f.services.length && f.description && "They say: " + f.description,
+  ].filter(Boolean);
+  const list = el("ul", { className: "facts" });
+  for (const t of facts) list.append(el("li", { textContent: t }));
+  const pages = el("div", { className: "pages" }, "Read: ");
+  f.pages.forEach((u, i) => pages.append(i ? " · " : "", el("a", { href: u, target: "_blank", rel: "noopener", textContent: new URL(u).pathname === "/" ? r.site : new URL(u).pathname })));
+  box.append(el("details", {}, el("summary", { textContent: `What was found (${facts.length})` }), list, pages));
+  return box;
 }
 
 function rowEl(row) {
@@ -508,13 +509,8 @@ function renderMessage() {
     const mail = emailFor(row);
     box.appendChild(mailBox(mail.kind === "first" ? "Will send" : "Follow-up (will send)", mail,
       mail.kind === "followup" && !followUpDue(row) ? `Best sent after ${FOLLOW_UP_DAYS} days without a reply` : ""));
-    // Where a suggested note came from, so you can check it's right.
-    if (row.noteSource && mail.kind === "first") {
-      const s = row.noteSource;
-      box.appendChild(el("p", { className: "source" },
-        el("b", { textContent: `What ${s.site} says about itself: ` }), [s.title, s.desc].filter(Boolean).join(" — "),
-        el("br"), "Check the personal note matches, and make it your own (one real detail you like beats a generic line)."));
-    }
+    // Note ideas and the facts behind them, so you can pick and check.
+    if (row.research && mail.kind === "first") box.appendChild(researchBox(row));
   }
   for (const h of [...(row.history || [])].reverse()) {
     box.appendChild(mailBox("Sent", { to: row.email, subject: h.subject, body: h.body },

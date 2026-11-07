@@ -65,6 +65,14 @@
   td.note { white-space: nowrap; min-width: 260px; }
   td.note input { width: calc(100% - 74px); display: inline-block; vertical-align: middle; }
   .suggest { font-size: 11px; padding: 3px 7px; margin-left: 4px; }
+  .idea { display: flex; gap: 8px; align-items: baseline; padding: 6px 0; border-top: 1px solid var(--b); font-size: 13px; color: var(--t); }
+  .idea:first-of-type { margin-top: 6px; }
+  .idea span:nth-child(2) { flex: 1; }
+  .idea .kind { flex: 0 0 120px; font-size: 11px; font-weight: 600; color: #4338ca; text-transform: uppercase; letter-spacing: .03em; }
+  .idea button { padding: 3px 10px; font-size: 12px; }
+  .facts { margin: 6px 0; padding-left: 18px; }
+  .pages a { color: var(--a); }
+  .source summary { cursor: pointer; margin-top: 6px; font-weight: 600; }
   .source { font-size: 12px; color: #4b5563; background: #f9fafb; border: 1px dashed var(--b); border-radius: 8px; padding: 8px 10px; margin: -4px 0 12px; line-height: 1.5; }
   .notice { background: #fef3c7; border: 1px solid #fcd34d; color: #78350f; border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; font-size: 14px; line-height: 1.5; }
   .notice button { margin-left: 6px; }
@@ -114,6 +122,7 @@
     <div id="message"></div>
   </section>
 </main>
+<script src="research.js"></script>
 <script src="outreach.js"></script>
 </body>
 </html>

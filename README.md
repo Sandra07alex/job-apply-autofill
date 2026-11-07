@@ -19,7 +19,7 @@ Applying to jobs means entering identical information dozens of times across dif
 - **Find jobs:** one list of matching jobs from companies' own career sites (about 60 companies hiring in India on Greenhouse, Lever, Ashby and Workday, plus Remotive and optionally Adzuna), filtered for your roles, cities, recency and fresher level, with Apply, Save and Hide. Add any company by pasting its careers link. LinkedIn, Naukri and Indeed can't be read by tools, so their searches open as links instead
 - **Save job for later (`Alt+Shift+S`):** on any job page, including LinkedIn, Naukri and Indeed, saves the job (real link, title, company, city) to **Saved jobs** on the Find jobs page and to My applications as "To apply". LinkedIn, Naukri and Indeed listings are never read in the background: their terms forbid it and LinkedIn can restrict accounts that do
 - **Application tracker:** every job you fill is logged (company, role, link, date) and marked Applied when you submit. Track interviews, offers and rejections, get "Follow up" reminders after 10 quiet days, and export to CSV
-- **Email companies:** write a first email and a follow-up with placeholders ({company}, {role}, {note}…), paste a list of companies and HR emails, and open each one as a ready Gmail draft with your resume attached. You click Send. A built-in email tracker records what you sent and when, flags follow-ups after 7 days without a reply, and tracks Replied / Interview / Offer / Rejected. **Suggest notes** reads each company's website (found from the HR email's domain) and drafts the personal note, showing what the site says so you can check it
+- **Email companies:** write a first email and a follow-up with placeholders ({company}, {role}, {note}…), paste a list of companies and HR emails, and open each one as a ready Gmail draft with your resume attached. You click Send. A built-in email tracker records what you sent and when, flags follow-ups after 7 days without a reply, and tracks Replied / Interview / Offer / Rejected. **Suggest notes** researches each company's website (found from the HR email's domain): its products, services, industries, tech stack, news, Kerala offices and mission, and offers several note ideas that link them to your own experience, with the facts and pages behind them
 - **Workday pickers:** opens "Select One" lists and picks from School / Skills search suggestions
 - **One click or one shortcut** (`Alt+Shift+F`) to fill the current page
 - **Step by step on multi-page forms:** after the first Fill, a bar on the page fills each new step by itself; **Next step** (or `Alt+Shift+N`) clicks the site's Save and Continue for you, warns about empty fields and steps the site rejects, and stops at Review. It never clicks Submit
@@ -58,6 +58,7 @@ extension/
   tracker.html/js The "My applications" tracker page
   findjobs.html/js The "Find jobs" page (job list, companies, search links)
   jobfeed.js      Reads public job feeds and filters jobs by role, location, recency and level
+  research.js     Reads a company's site and turns what it finds into personal note ideas
   outreach.html/js The "Email companies" page (template, company list, preview)
   gmail.js        Runs on Gmail pages; in a draft opened from "Email companies" it attaches your resume and notices Send
   resume.js       Turns pasted resume text into a profile
@@ -68,6 +69,7 @@ tests/
   fill.test.js    Runs fill.js against mock LinkedIn, Workday and Keka forms in headless Chromium
   resume.test.js  Checks the resume parser on sample resumes
   jobfeed.test.js Checks job filtering with fake feeds
+  research.test.js Checks company research on a fake site
   guide.test.js   Walks the step-by-step bar through a mock three-step application
   gmail.test.js   Runs gmail.js against mock Gmail compose windows (each way of attaching)
   extension.test.js Loads the real extension in Chromium: "Open in Gmail" and the step-by-step bar end to end
