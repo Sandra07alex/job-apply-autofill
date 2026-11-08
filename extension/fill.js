@@ -618,18 +618,27 @@
     leftForYou.set(el, { q, profileKey, before: answerOf(el) });
   }
 
-  function toast(message, onUndo) {
+  // A small message at the corner of the page with one button. Returns its parts.
+  function messageBox(message, buttonText, onButton) {
     const box = document.createElement("div");
     box.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:2147483647;max-width:360px;background:#1f2937;color:#fff;" +
       "font:13px/1.4 system-ui,sans-serif;padding:10px 12px;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.25);display:flex;gap:10px;align-items:center";
     const text = document.createElement("span");
     text.textContent = message;
-    const undo = document.createElement("button");
-    undo.textContent = "Undo";
-    undo.style.cssText = "background:none;border:1px solid #9ca3af;color:#fff;border-radius:6px;padding:2px 8px;cursor:pointer;font:inherit";
-    undo.onclick = () => { onUndo(); box.remove(); };
-    box.append(text, undo);
+    box.append(text);
+    if (onButton) {
+      const button = document.createElement("button");
+      button.textContent = buttonText;
+      button.style.cssText = "background:none;border:1px solid #9ca3af;color:#fff;border-radius:6px;padding:2px 8px;cursor:pointer;font:inherit";
+      button.onclick = () => { onButton(); box.remove(); };
+      box.append(button);
+    }
     document.body.appendChild(box);
+    return { box, text };
+  }
+
+  function toast(message, onUndo) {
+    const { box } = messageBox(message, "Undo", onUndo);
     setTimeout(() => box.remove(), 7000);
   }
 
@@ -684,8 +693,8 @@
   const titleCase = (s) => s.replace(/[-_]+/g, " ").replace(/\b[a-z]/g, (c) => c.toUpperCase()).trim();
 
   // One entry per job, whichever step of the form you're on.
-  function jobKey() {
-    const u = new URL(location.href);
+  function jobKey(href = location.href) {
+    const u = new URL(href);
     const li = u.searchParams.get("currentJobId") || (u.pathname.match(/\/jobs\/view\/(\d+)/) || [])[1];
     if (/linkedin\.com$/.test(u.hostname) && li) return "linkedin.com/jobs/view/" + li;
     // Indeed: every job is /viewjob (or a search page) told apart by jk / vjk.
@@ -779,18 +788,140 @@
     return location.href;
   }
 
+  // ---------- Google Jobs ----------
+  const onGoogleSearch = () => /(^|\.)google\.[a-z.]+$/.test(location.hostname) && location.pathname === "/search";
+  const shown = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden";
+
+  // Google's links may be wrapped: google.com/url?q=<the real link>.
+  function realLink(href) {
+    try {
+      const u = new URL(href, location.href);
+      const inner = /(^|\.)google\./.test(u.hostname) && u.pathname === "/url" && (u.searchParams.get("q") || u.searchParams.get("url"));
+      return inner ? new URL(inner) : u;
+    } catch (_) { return null; }
+  }
+
+  // Sites that tell jobs apart by ?id= stay separate; tracking parameters are ignored.
+  function linkKey(url) {
+    const key = jobKey(url.href);
+    if (key.includes("?")) return key;
+    const rest = new URLSearchParams([...url.searchParams].filter(([k]) => !/^(utm_|gclid|fbclid|trk|ref|src|source|from|campaign)/i.test(k)));
+    rest.sort();
+    return String(rest) ? `${key}?${rest}` : key;
+  }
+
+  // Every Google Jobs result shares one address, so read the job open in the side panel:
+  // its "Apply on ..." link and its "Company · City · via Site" line.
+  function googleJob() {
+    for (const a of document.querySelectorAll("a[href]")) {
+      if (!/^apply\b/i.test(textOf(a) || a.getAttribute("aria-label") || "") || !shown(a)) continue;
+      const url = realLink(a.href);
+      if (!url || /(^|\.)google\./.test(url.hostname)) continue;
+      for (let box = a.parentElement; box && box !== document.documentElement; box = box.parentElement) {
+        let line = null, parts = null;
+        for (const el of box.querySelectorAll("div, span")) {
+          const t = textOf(el);
+          parts = t.length < 200 && t.match(/^(.+?)\s*[·•]\s*(.+?)\s*[·•]\s*via\s+(.+)$/i);
+          if (parts && shown(el)) { line = el; break; }
+        }
+        if (!line) continue;
+        const [, company, place, site] = parts;
+        const before = [...box.querySelectorAll("h1, h2, h3, [role='heading']")]
+          .filter((h) => shown(h) && (h.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING) && norm(textOf(h)) !== norm(company));
+        let title = textOf(before[before.length - 1]);
+        for (let n = line; n && n !== box && !title; n = n.parentElement) title = textOf(n.previousElementSibling);
+        if (!title) continue;
+        return { key: linkKey(url), url: url.href, company, role: title, location: place, notes: `Found on Google Jobs (via ${site})` };
+      }
+    }
+    return null;
+  }
+
+  // The job cards in the list: each has a "City • via Site" line (one dot; the open job's
+  // line in the side panel has two). text is the whole card, used to recognise it.
+  function googleCards() {
+    const isCardLine = (el) => el.textContent.length < 300 && /^[^·•]+[·•]\s*via\s+\S/i.test(textOf(el)) && textOf(el).length < 120;
+    const cards = [];
+    for (const line of document.querySelectorAll("div, span")) {
+      if (!/via\s/i.test(line.textContent) || !isCardLine(line) || !shown(line) || [...line.children].some(isCardLine)) continue;
+      let top = line;
+      while (top.parentElement && top.parentElement !== document.body && textOf(top.parentElement).split(/[·•]\s*via\s/i).length === 2) top = top.parentElement;
+      cards.push({ line, top, text: norm(textOf(top)) });
+    }
+    return cards;
+  }
+
+  const waitMs = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // Opens each job in the list in turn, reads its apply link and saves it. Stops by itself
+  // at 100 jobs. Google loads more jobs as the list scrolls, so it follows the list down.
+  async function saveAllGoogleJobs() {
+    if (window.__autofillSavingAll) return { busy: true };
+    if (!onGoogleSearch()) { toast("Save all works on Google Jobs results."); return { error: "Save all works on Google Jobs results." }; }
+    if (!googleCards().length) { toast("Couldn't find a list of jobs on this page."); return { error: "Couldn't find a list of jobs on this page." }; }
+    window.__autofillSavingAll = true;
+    let stopped = false;
+    const progress = messageBox("Saving jobs…", "Stop", () => { stopped = true; });
+    const had = new Set(((await getStore(["applications"])).applications || []).map((a) => a.key));
+    const handled = new Set(), added = new Set();
+    let already = 0, failed = 0, prevKey = (googleJob() || {}).key, last = null, lookedForMore = false;
+    try {
+      while (!stopped && handled.size < 100) {
+        const card = googleCards().find((c) => !handled.has(c.text));
+        if (!card) {
+          if (lookedForMore) break;
+          lookedForMore = true;
+          if (last && last.isConnected) last.scrollIntoView({ block: "end" });
+          await waitMs(1500);
+          continue;
+        }
+        lookedForMore = false;
+        handled.add(card.text);
+        last = card.top;
+        card.line.scrollIntoView({ block: "center" });
+        await waitMs(250);
+        const r = card.line.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        (hit && card.top.contains(hit) ? hit : card.line).click();
+        // The panel has caught up when it shows a new job, or the job this card describes.
+        let job = null;
+        for (let t = 0; t < 4000 && !job && !stopped; t += 150) {
+          const j = googleJob();
+          if (j && (j.key !== prevKey || (card.text.includes(norm(j.role)) && card.text.includes(norm(j.company))))) job = j;
+          else await waitMs(150);
+        }
+        if (stopped) break;
+        if (!job) { failed++; continue; }
+        prevKey = job.key;
+        if (had.has(job.key) || added.has(job.key)) already++;
+        else { await logApplication("To apply", job); added.add(job.key); }
+        progress.text.textContent = `Saved ${added.size} job${added.size === 1 ? "" : "s"}…`;
+      }
+    } finally {
+      window.__autofillSavingAll = false;
+      progress.box.remove();
+    }
+    const notes = [already && `${already} already in your list`, failed && `${failed} couldn't be read`].filter(Boolean).join(", ");
+    toast(`Saved ${added.size} job${added.size === 1 ? "" : "s"} to your list${notes ? ` (${notes})` : ""}.`, added.size ? async () => {
+      const s = await getStore(["applications"]);
+      await setStore({ applications: (s.applications || []).filter((a) => !added.has(a.key)) });
+    } : undefined);
+    return { savedAll: added.size, already, failed };
+  }
+
   // status: "In progress" when filling, "To apply" when you save a job for later.
-  async function logApplication(status = "In progress") {
-    const key = jobKey();
+  // job: details already read from the page (Google Jobs); otherwise they're guessed.
+  async function logApplication(status = "In progress", job = null) {
+    const key = job ? job.key : jobKey();
     const apps = (await getStore(["applications"])).applications || [];
     let app = apps.find((a) => a.key === key);
     if (app) {
       app.updated = today();
       if (app.status === "To apply" && status === "In progress") app.status = "In progress"; // started applying
     } else {
-      const company = guessCompany();
-      app = { id: Date.now().toString(36), key, url: jobUrl(), company, role: guessRole(company), location: guessLocation(),
-        status, created: today(), updated: today(), appliedOn: "", notes: "" };
+      const company = job ? job.company : guessCompany();
+      app = { id: Date.now().toString(36), key, url: job ? job.url : jobUrl(), company, role: job ? job.role : guessRole(company),
+        location: job ? job.location : guessLocation(), status, created: today(), updated: today(), appliedOn: "", notes: job ? job.notes : "" };
       apps.push(app);
     }
     await setStore({ applications: apps });
@@ -825,11 +956,22 @@
   }
 
   // ---------- Run ----------
+  if (window.__AUTOFILL_SAVE_ALL__) {
+    window.__AUTOFILL_SAVE_ALL__ = false;
+    return await saveAllGoogleJobs();
+  }
+
   // "Save job" in the popup: only add this job to the tracker as "To apply".
   if (window.__AUTOFILL_SAVE_ONLY__) {
     window.__AUTOFILL_SAVE_ONLY__ = false;
+    const fromGoogle = onGoogleSearch() ? googleJob() : null;
+    if (onGoogleSearch() && !fromGoogle) {
+      const error = "Open a job from the Google Jobs list first, then save again.";
+      toast(error);
+      return { error };
+    }
     const before = ((await getStore(["applications"])).applications || []).length;
-    const app = await logApplication("To apply");
+    const app = await logApplication("To apply", fromGoogle);
     const isNew = ((await getStore(["applications"])).applications || []).length > before;
     const what = [app.role, app.company].filter(Boolean).join(" at ") || "this job";
     toast(isNew ? `Saved to your job list: ${what}` : `Already in your list: ${what} (${app.status})`, async () => {

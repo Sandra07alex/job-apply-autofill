@@ -117,7 +117,7 @@ async function refresh() {
     });
     if (feed && feed.partial) feed = null; // the full list replaces the partial one
     if (feed) for (const j of feed.jobs) seen.add(j.url); // "New" = not in the previous list
-    feed = { at: Date.now(), jobs: r.jobs, failed: r.failed, checked: r.checked };
+    feed = { at: Date.now(), jobs: r.jobs, failed: r.failed, checked: r.checked, adzunaError: r.adzunaError };
     saveState();
     showTab("jobs");
   } catch (e) {
@@ -194,6 +194,14 @@ function savedCard(a) {
     apply);
 }
 
+// Says whether your Adzuna key worked, so a wrong key doesn't just look like few jobs.
+function adzunaStatus() {
+  if (!adzuna.id || !adzuna.key || feed.partial) return "";
+  const err = feed.adzunaError;
+  if (err) return /40[13]/.test(err) ? " · Adzuna didn't accept your key, check it under More, below" : ` · Adzuna didn't answer (${err})`;
+  return ` · ${feed.jobs.filter((j) => j.source === "Adzuna").length} from Adzuna`;
+}
+
 function renderList() {
   const box = $("list");
   box.innerHTML = "";
@@ -215,7 +223,8 @@ function renderList() {
     box.append(el("p", { className: "empty", textContent: "Looking for jobs… this takes about a minute the first time." }));
     return;
   }
-  $("status").textContent = `Updated ${ago(Date.now() - feed.at)}` + (feed.failed.length ? ` · ${feed.failed.length} source(s) didn't answer` : "");
+  const otherFailed = feed.failed.filter((n) => n !== "Adzuna").length;
+  $("status").textContent = `Updated ${ago(Date.now() - feed.at)}` + (otherFailed ? ` · ${otherFailed} source(s) didn't answer` : "") + adzunaStatus();
   const keys = savedKeys();
   const shown = jobs.filter((j) => match(j.title, j.company, j.location));
   shown.forEach((j) => box.append(jobCard(j, keys.has(JobFeed.jobKeyFor(j.url)))));

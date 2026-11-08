@@ -209,19 +209,32 @@
     return out;
   }
 
-  async function readAdzuna(fetchFn, key, roles, locations, maxDays) {
-    const out = [];
-    const where = locations.filter((l) => !/^remote$/i.test(l));
-    for (const role of roles.slice(0, 3)) {
-      for (const loc of where.length ? where : [""]) {
-        const q = new URLSearchParams({ app_id: key.id, app_key: key.key, what: role, results_per_page: "50", max_days_old: String(maxDays) });
-        if (loc) q.set("where", loc);
-        const d = await getJson(fetchFn, `https://api.adzuna.com/v1/api/jobs/in/search/1?${q}`);
-        for (const j of d.results || []) {
-          out.push({ title: String(j.title || "").replace(/<[^>]+>/g, ""), company: (j.company && j.company.display_name) || "",
-            location: (j.location && j.location.display_name) || "", days: daysSince(j.created), url: j.redirect_url, source: "Adzuna",
-            text: j.description });
-        }
+  // Your cities first, then all of India (two pages). At most 15 requests per refresh, one
+  // at a time, to stay well inside a free key's limits.
+  async function readAdzuna(fetchFn, key, searches, locations, maxDays) {
+    const PER_PAGE = 50;
+    const cities = locations.filter((l) => !/^remote$/i.test(l)).slice(0, 3);
+    const roles = searches.slice(0, 3);
+    const plan = [];
+    for (const role of roles) for (const city of cities) plan.push({ role, city, page: 1 });
+    for (const role of roles) for (const page of [1, 2]) plan.push({ role, city: "", page });
+
+    const out = [], noMore = new Set();
+    for (const { role, city, page } of plan) {
+      if (!city && noMore.has(role)) continue;
+      const q = new URLSearchParams({ app_id: key.id, app_key: key.key, what: role, results_per_page: String(PER_PAGE),
+        max_days_old: String(maxDays), "content-type": "application/json" });
+      if (city) q.set("where", city);
+      let d;
+      // A wrong key fails on the first request. A limit reached later keeps what was found.
+      try { d = await getJson(fetchFn, `https://api.adzuna.com/v1/api/jobs/in/search/${page}?${q}`); }
+      catch (e) { if (!out.length) throw e; break; }
+      const results = d.results || [];
+      if (!city && results.length < PER_PAGE) noMore.add(role);
+      for (const j of results) {
+        out.push({ title: String(j.title || "").replace(/<[^>]+>/g, ""), company: (j.company && j.company.display_name) || "",
+          location: (j.location && j.location.display_name) || "", days: daysSince(j.created), url: j.redirect_url, source: "Adzuna",
+          text: j.description, inIndia: true });
       }
     }
     return out;
@@ -233,11 +246,17 @@
     const fetchFn = opts.fetch || fetch.bind(root);
     const roles = opts.roles.filter(Boolean), locations = opts.locations.filter(Boolean);
     // Fresher jobs often have other names ("SDE I", "Associate Engineer", "React Developer").
-    const matchRole = roleMatcher(opts.related === false ? roles : relatedRoles(roles));
+    const searchRoles = opts.related === false ? roles : relatedRoles(roles);
+    const matchRole = roleMatcher(searchRoles);
     // Workday searches are global, so add "India" to them (you're applying from India).
     const tasks = opts.companies.map(([kind, id, name]) => async () => READERS[kind](fetchFn, id, name, { roles, india: true }));
-    if (locations.some((l) => /^remote$/i.test(l))) tasks.push(() => readRemotive(fetchFn, roles));
-    if (opts.adzuna && opts.adzuna.id && opts.adzuna.key) tasks.push(() => readAdzuna(fetchFn, opts.adzuna, roles, locations, opts.maxDays));
+    const names = opts.companies.map((c) => c[2]);
+    if (locations.some((l) => /^remote$/i.test(l))) { tasks.push(() => readRemotive(fetchFn, roles)); names.push("Remotive"); }
+    let adzunaTask = -1, adzunaError = "";
+    if (opts.adzuna && opts.adzuna.id && opts.adzuna.key) {
+      adzunaTask = tasks.push(() => readAdzuna(fetchFn, opts.adzuna, searchRoles, locations, opts.maxDays)) - 1;
+      names.push("Adzuna");
+    }
 
     const all = [], failed = [];
     const filterJobs = (found) => filterJobsWith(found, opts, matchRole, locations);
@@ -245,14 +264,14 @@
     async function worker() {
       while (next < tasks.length) {
         const i = next++;
-        try { all.push(...await tasks[i]()); } catch (e) { failed.push(i < opts.companies.length ? opts.companies[i][2] : i === opts.companies.length ? "Remotive" : "Adzuna"); }
+        try { all.push(...await tasks[i]()); } catch (e) { failed.push(names[i]); if (i === adzunaTask) adzunaError = e.message; }
         done++;
         // Every few sources, hand back the jobs so far so the page can show them while it keeps looking.
         if (opts.onProgress) opts.onProgress(done, tasks.length, done % 8 === 0 || done === tasks.length ? () => filterJobs(all) : null);
       }
     }
     await Promise.all(Array.from({ length: opts.concurrency || 8 }, worker));
-    return { jobs: filterJobs(all), failed, checked: tasks.length };
+    return { jobs: filterJobs(all), failed, checked: tasks.length, adzunaError };
   }
 
   // Keep the jobs that fit, best first. Used for the final list and the lists shown on the way.
@@ -269,7 +288,8 @@
       seen.add(same);
       if (!matchRole(j.title)) continue;
       if (j.days !== null && j.days > opts.maxDays) continue;
-      const where = locationScore(j.location, locations);
+      // Adzuna's India search is all India, including cities the location check doesn't know.
+      const where = locationScore(j.location, locations) || (j.inIndia ? 2 : 0);
       if (!where) continue;
       const fresher = FRESHER_RE.test(j.title);
       if (opts.level === "fresher") {

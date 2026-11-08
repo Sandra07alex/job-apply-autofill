@@ -6,7 +6,7 @@ function fillTab(tabId, frameIds) {
 }
 
 // Keyboard shortcuts: Alt+Shift+F fills the current page, Alt+Shift+N goes to the next step,
-// Alt+Shift+S saves the job you're looking at (LinkedIn, Naukri, Indeed, any job page).
+// Alt+Shift+S saves the job you're looking at (LinkedIn, Naukri, Indeed, Google Jobs, any job page).
 chrome.commands.onCommand.addListener(async (command) => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
@@ -15,6 +15,10 @@ chrome.commands.onCommand.addListener(async (command) => {
     if (command === "next-step") await chrome.tabs.sendMessage(tab.id, { type: "guide-next" });
     if (command === "save-job") {
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => { window.__AUTOFILL_SAVE_ONLY__ = true; } });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["fill.js"] });
+    }
+    if (command === "save-all-jobs") {
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => { window.__AUTOFILL_SAVE_ALL__ = true; } });
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["fill.js"] });
     }
   } catch (e) {

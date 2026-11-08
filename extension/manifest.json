@@ -26,6 +26,10 @@
     "save-job": {
       "suggested_key": { "default": "Alt+Shift+S" },
       "description": "Save the job on this page to your job list"
+    },
+    "save-all-jobs": {
+      "suggested_key": { "default": "Alt+Shift+A" },
+      "description": "Save every job in a Google Jobs list to your job list"
     }
   }
 }

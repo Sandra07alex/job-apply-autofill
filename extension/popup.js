@@ -15,6 +15,25 @@ document.getElementById("apps").addEventListener("click", () => chrome.tabs.crea
 document.getElementById("mail").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("outreach.html") }));
 document.getElementById("find").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("findjobs.html") }));
 
+// On Google search pages: save every job in the Google Jobs list. It runs on the page, with its own progress and Stop.
+const saveAll = document.getElementById("saveAll");
+chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+  try {
+    const u = new URL(tab.url);
+    saveAll.hidden = !(/(^|\.)google\.[a-z.]+$/.test(u.hostname) && u.pathname === "/search");
+  } catch (_) {}
+});
+saveAll.addEventListener("click", async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  try {
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => { window.__AUTOFILL_SAVE_ALL__ = true; } });
+    chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["fill.js"] }).catch(() => {});
+    window.close();
+  } catch (e) {
+    statusEl.textContent = "Can't run on this page (Chrome blocks extensions on some pages).";
+  }
+});
+
 // Save the job on this page to My applications as "To apply" (nothing is filled).
 document.getElementById("save").addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

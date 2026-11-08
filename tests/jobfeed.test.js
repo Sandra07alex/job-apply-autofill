@@ -48,6 +48,34 @@ const fakeFetch = async (url) => {
   assert.ok(r.jobs.find((j) => j.title === 'Software Engineer II').midLevel);
   assert.strictEqual(r.jobs[0].fresher, true, 'fresher-friendly jobs come first');
 
+  // Adzuna: your city, then all of India over two pages, without showing the key's failure as another source.
+  const adzunaCalls = [];
+  const adzunaFetch = async (url) => {
+    const u = new URL(url), page = u.pathname.split('/').pop();
+    adzunaCalls.push({ where: u.searchParams.get('where'), page, what: u.searchParams.get('what'), type: u.searchParams.get('content-type') });
+    const created = new Date().toISOString();
+    const job = (id, title, display_name) => ({ id, title, company: { display_name: 'Co' }, location: { display_name }, created, redirect_url: 'https://adzuna.example/' + id, description: '' });
+    if (u.searchParams.get('where')) return { ok: true, status: 200, json: async () => ({ results: u.searchParams.get('what') === 'Software Engineer' ? [job('k', '<strong>Software</strong> Engineer', 'Ernakulam')] : [] }) };
+    const what = u.searchParams.get('what');
+    const results = what !== 'Software Engineer' ? [] : page === '1'
+      ? Array.from({ length: 50 }, (_, i) => job('p' + i, 'Software Engineer ' + (i ? 'Team ' + i : 'Trainee'), 'Indore, Madhya Pradesh'))
+      : [job('p2', 'Software Developer Trainee', 'Nashik')];
+    return { ok: true, status: 200, json: async () => ({ results }) };
+  };
+  const az = await F.findJobs({ roles: ['Software Engineer'], locations: ['Kochi'], level: 'fresher', maxDays: 30, fetch: adzunaFetch, companies: [], adzuna: { id: 'i', key: 'k' } });
+  assert.deepStrictEqual(az.failed, []);
+  assert.ok(az.jobs.some((j) => j.url.endsWith('/k') && j.title === 'Software Engineer' && j.where === 3), 'Ernakulam counts as Kochi');
+  assert.ok(az.jobs.some((j) => j.url.endsWith('/p0') && j.where === 2), 'an Indian city the location check does not know is kept');
+  assert.ok(az.jobs.some((j) => j.url.endsWith('/p2')), 'second page of all-India results is read');
+  assert.ok(adzunaCalls.length <= 15, 'stays within the request cap');
+  assert.ok(adzunaCalls.every((c) => c.type === 'application/json'));
+  assert.ok(!adzunaCalls.some((c) => c.what === 'Software Developer' && c.page === '2'), 'no second page when the first was short');
+
+  const badKey = await F.findJobs({ roles: ['Software Engineer'], locations: ['Kochi'], level: 'fresher', maxDays: 30, companies: [], adzuna: { id: 'i', key: 'bad' },
+    fetch: async () => ({ ok: false, status: 401, json: async () => ({}) }) });
+  assert.deepStrictEqual(badKey.failed, ['Adzuna'], 'a failed Adzuna is named Adzuna, not Remotive');
+  assert.strictEqual(badKey.adzunaError, 'HTTP 401');
+
   // Small pieces
   assert.deepStrictEqual(F.parseCareerUrl('https://intel.wd1.myworkdayjobs.com/en-US/External/job/India-Bangalore/X_JR1'), ['workday', 'intel.wd1.myworkdayjobs.com|intel|External', 'intel']);
   assert.deepStrictEqual(F.parseCareerUrl('https://job-boards.greenhouse.io/stripe/jobs/123'), ['greenhouse', 'stripe', 'stripe']);

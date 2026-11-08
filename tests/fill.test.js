@@ -185,7 +185,16 @@ loc.addEventListener('input',()=>setTimeout(()=>{ul.innerHTML='';for(const o of 
      `<title>Jobs | LinkedIn</title><div class="job-details-jobs-unified-top-card__job-title"><h1>Full Stack Developer</h1></div>
       <div class="job-details-jobs-unified-top-card__company-name">Velvet Labs</div>
       <div class="job-details-jobs-unified-top-card__primary-description-container">Kochi, Kerala, India · 2 weeks ago · 40 applicants</div>`,
-     ['Full Stack Developer','Velvet Labs','Kochi, Kerala, India','https://www.linkedin.com/jobs/view/4012345678/']]]) {
+     ['Full Stack Developer','Velvet Labs','Kochi, Kerala, India','https://www.linkedin.com/jobs/view/4012345678/']],
+    ['google','https://www.google.com/search?q=full+stack+fresher+jobs+kochi&udm=8#sv=abc',
+     `<title>full stack fresher jobs kochi - Google Search</title>
+      <div><div>Junior Full-Stack Developer</div><div>Windfall Production Pvt Ltd</div><div>Kochi, Keralam • via Shine</div></div>
+      <div style="display:none"><h1>Old Cached Job</h1><div><span>Old Co</span> · <span>Pune</span> · <span>via Naukri</span></div><a href="https://www.naukri.com/job-old">Apply on Naukri</a></div>
+      <div><div><div role="heading">Nesa Software Pvt Ltd</div></div><h1>MERN Stack Developer</h1>
+       <div><span>Nesa Software Pvt Ltd</span> · <span>Kochi, Keralam</span> · <span>via SimplyHired</span></div>
+       <div><a href="https://www.google.com/url?q=https%3A%2F%2Fwww.simplyhired.co.in%2Fjob%2Fabc123%3Futm_source%3Dgoogle"><span>Apply on SimplyHired</span></a><a href="https://in.jobrapido.com/jobpreview/9">Apply on Jobrapido.com</a></div>
+       <h2>Job description</h2></div>`,
+     ['MERN Stack Developer','Nesa Software Pvt Ltd','Kochi, Keralam','https://www.simplyhired.co.in/job/abc123?utm_source=google']]]) {
     const pg=await browser.newPage();
     await pg.route(url.split('?')[0]+'*',r=>r.fulfill({contentType:'text/html; charset=utf-8',body}));
     await pg.goto(url);
@@ -198,6 +207,49 @@ loc.addEventListener('input',()=>setTimeout(()=>{ul.innerHTML='';for(const o of 
     const a=(await pg.evaluate(()=>window.__AUTOFILL_TEST__.applications));
     console.log(`   save on ${site.padEnd(8)}`,JSON.stringify([a[0].role,a[0].company,a[0].location,a[0].url]),'| entries:',a.length,'|',toast1.replace('Undo',''),'|',toast2.replace('Undo','').slice(0,22));
     if(JSON.stringify([a[0].role,a[0].company,a[0].location,a[0].url])!==JSON.stringify(want)||a.length!==1) throw new Error('save on '+site+' wrong');
+    await pg.close();
+  }
+  // Google Jobs: two jobs are two entries (even on a site that tells jobs apart by ?id=), and with no job open nothing is saved.
+  {
+    const panel=(title,co,id)=>`<h1>${title}</h1><div>${co} · Kochi · via Example</div><a href="https://jobs.example.com/view?id=${id}&utm_source=google">Apply on Example</a>`;
+    const pg=await browser.newPage();
+    let body=panel('Web Developer','One Co',1);
+    await pg.route('https://www.google.com/search*',r=>r.fulfill({contentType:'text/html; charset=utf-8',body}));
+    await pg.goto('https://www.google.com/search?q=jobs&udm=8');
+    await pg.evaluate(p=>{window.__AUTOFILL_TEST__={profile:p};window.__AUTOFILL_SAVE_ONLY__=true},profile);
+    await pg.evaluate(src);
+    await pg.evaluate(h=>{document.body.innerHTML=h;window.__AUTOFILL_SAVE_ONLY__=true},panel('React Developer','Two Co',2));
+    await pg.evaluate(src);
+    await pg.evaluate(()=>{document.body.innerHTML='<div>Junior Developer</div><div>Kochi • via Shine</div>';window.__AUTOFILL_SAVE_ONLY__=true});
+    const none=await pg.evaluate(src);
+    const toast=await pg.evaluate(()=>document.body.lastElementChild.textContent);
+    const a=await pg.evaluate(()=>window.__AUTOFILL_TEST__.applications);
+    console.log('   google jobs      ',JSON.stringify(a.map(x=>[x.role,x.company,x.key,x.notes])),'|',toast);
+    if(a.length!==2||a[0].key===a[1].key||a[1].role!=='React Developer'||none.saved||!/Open a job/.test(toast)) throw new Error('google jobs save wrong');
+    await pg.close();
+  }
+  // Google Jobs, save all: opens each card, skips one that never opens, follows newly loaded cards, and Undo removes them.
+  {
+    const body=`<title>jobs - Google Search</title><div id=list></div><div id=panel></div><script>
+      const jobs=[['Web Developer','One Co',1],['React Developer','Two Co',2],['Stuck Job','Three Co',0],['Web Developer','Four Co',4],['Late Job','Five Co',5]];
+      function card(j){const d=document.createElement('div');d.innerHTML='<div>'+j[0]+'</div><div>'+j[1]+'</div><div>Kochi • via Shine</div>';
+        d.onclick=()=>{if(!j[2])return;if(j[2]===4&&!jobs.added){jobs.added=1;list.append(card(jobs[4]))}
+          setTimeout(()=>{panel.innerHTML='<h1>'+j[0]+'</h1><div>'+j[1]+' · Kochi · via Shine</div><a href="https://jobs.example.com/view/'+j[2]+'">Apply on Shine</a>'},60)};return d}
+      jobs.slice(0,4).forEach(j=>list.append(card(j)));
+    </script>`;
+    const pg=await browser.newPage();
+    await pg.route('https://www.google.com/search*',r=>r.fulfill({contentType:'text/html; charset=utf-8',body}));
+    await pg.goto('https://www.google.com/search?q=jobs&udm=8');
+    await pg.evaluate(p=>{window.__AUTOFILL_TEST__={profile:p,applications:[{id:'old',key:'jobs.example.com/view/2',status:'Applied'}]};window.__AUTOFILL_SAVE_ALL__=true},profile);
+    const res=await pg.evaluate(src);
+    const a=await pg.evaluate(()=>window.__AUTOFILL_TEST__.applications);
+    const toast=await pg.evaluate(()=>document.body.lastElementChild.textContent);
+    console.log('   google save all  ',JSON.stringify(res),JSON.stringify(a.map(x=>[x.role,x.company,x.status])),'|',toast);
+    if(res.savedAll!==3||res.already!==1||res.failed!==1||a.length!==4||a[0].status!=='Applied'||!a.some(x=>x.role==='Late Job')) throw new Error('google save all wrong');
+    await pg.evaluate(()=>document.body.lastElementChild.querySelector('button').click());
+    await pg.waitForTimeout(50);
+    const left=await pg.evaluate(()=>window.__AUTOFILL_TEST__.applications);
+    if(left.length!==1||left[0].id!=='old') throw new Error('google save all undo wrong');
     await pg.close();
   }
   for (const [url,title,body] of [
