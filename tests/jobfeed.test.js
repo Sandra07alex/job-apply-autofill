@@ -98,6 +98,11 @@ const fakeFetch = async (url) => {
   const when = Object.fromEntries(dated.jobs.map((j) => [j.url, j.deadline]));
   assert.deepStrictEqual(when, { 'https://l/open': '2030-11-30', 'https://l/none': '', 'https://g/1': '2030-10-01' });
 
+  // Fresher means 1 year or less.
+  const byYears = await F.findJobs({ roles: ['Software Engineer'], locations: ['Kochi'], level: 'fresher', maxDays: 30, companies: [], adzuna: { id: 'i', key: 'k' },
+    fetch: async (url) => ({ ok: true, status: 200, json: async () => ({ results: url.includes('where=') ? ['0-1 years', '1-3 years', '2+ years', '5 yrs experience'].map((d, i) => ({ title: 'Software Engineer', company: { display_name: 'C' + i }, location: { display_name: 'Kochi' }, created: new Date().toISOString(), redirect_url: 'https://www.adzuna.in/land/ad/' + i, description: d })) : [] }) }) });
+  assert.deepStrictEqual(byYears.jobs.map((j) => j.company).sort(), ['C0', 'C1']);
+
   // Small pieces
   assert.deepStrictEqual(F.parseCareerUrl('https://intel.wd1.myworkdayjobs.com/en-US/External/job/India-Bangalore/X_JR1'), ['workday', 'intel.wd1.myworkdayjobs.com|intel|External', 'intel']);
   assert.deepStrictEqual(F.parseCareerUrl('https://job-boards.greenhouse.io/stripe/jobs/123'), ['greenhouse', 'stripe', 'stripe']);

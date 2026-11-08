@@ -134,7 +134,7 @@ function ago(ms) {
   return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`;
 }
 const postedText = (d) => (d === null || d === undefined ? "" : d === 0 ? "posted today" : d === 1 ? "posted yesterday" : `posted ${d} days ago`);
-const savedKeys = () => new Set(applications.map((a) => a.key));
+const savedKeys = () => new Set(applications.flatMap(knownKeys));
 const siteName = (url) => {
   try {
     const h = new URL(url).hostname.replace(/^www\./, "");
@@ -155,10 +155,48 @@ function deadlineTag(iso) {
   return el("span", { className: "tag " + (left <= 3 ? "t-urgent" : "t-date"), textContent });
 }
 
+// A saved Adzuna job keeps its old key after it's moved to the employer's link.
+const knownKeys = (a) => [a.key, a.adzunaKey].filter(Boolean);
+
+// Adzuna only gives its own link, and the employer's link appears once you open it in a
+// tab. So follow that tab (or the tab its Apply button opens) to the employer's site, then
+// point the saved job there: next time it opens directly, and filling the form there
+// updates this same entry.
+const adzunaTabs = new Map(); // tab id -> saved job's key
+const isAdzuna = (url) => { try { return /(^|\.)adzuna\.[a-z.]+$/.test(new URL(url).hostname); } catch (_) { return false; } };
+
+async function openJob(url, key) {
+  const direct = applications.find((a) => a.adzunaKey === key);
+  const tab = await chrome.tabs.create({ url: direct ? direct.url : url });
+  if (!direct && isAdzuna(url)) adzunaTabs.set(tab.id, key);
+}
+
+async function moveToEmployerLink(key, url) {
+  const { applications: apps = [] } = await chrome.storage.local.get("applications");
+  const app = apps.find((a) => a.key === key);
+  if (!app) return;
+  const newKey = JobFeed.jobKeyFor(url);
+  const twin = apps.find((a) => a !== app && a.key === newKey);
+  if (twin) { twin.adzunaKey = key; apps.splice(apps.indexOf(app), 1); } // you'd already saved this job from the employer
+  else Object.assign(app, { adzunaKey: key, key: newKey, url, updated: today() });
+  await chrome.storage.local.set({ applications: apps });
+  applications = apps;
+  renderList();
+}
+
+chrome.tabs.onCreated.addListener((t) => { if (adzunaTabs.has(t.openerTabId)) adzunaTabs.set(t.id, adzunaTabs.get(t.openerTabId)); });
+chrome.tabs.onRemoved.addListener((id) => adzunaTabs.delete(id));
+chrome.tabs.onUpdated.addListener((id, info, t) => {
+  const key = adzunaTabs.get(id);
+  if (!key || info.status !== "complete" || !/^https?:/.test(t.url || "") || isAdzuna(t.url)) return;
+  for (const [tabId, k] of adzunaTabs) if (k === key) adzunaTabs.delete(tabId);
+  moveToEmployerLink(key, t.url);
+});
+
 async function saveJob(job) {
   const { applications: apps = [] } = await chrome.storage.local.get("applications");
   const key = JobFeed.jobKeyFor(job.url);
-  if (!apps.some((a) => a.key === key)) {
+  if (!apps.some((a) => knownKeys(a).includes(key))) {
     apps.push(newApplication(job, key, Date.now().toString(36)));
     await chrome.storage.local.set({ applications: apps });
   }
@@ -173,7 +211,7 @@ function jobsOnScreen() {
 }
 $("saveAll").onclick = async () => {
   const { applications: apps = [] } = await chrome.storage.local.get("applications");
-  const have = new Set(apps.map((a) => a.key));
+  const have = new Set(apps.flatMap(knownKeys));
   const stamp = Date.now().toString(36);
   lastSavedAll = new Set();
   jobsOnScreen().forEach((job, i) => {
@@ -222,7 +260,7 @@ function jobCard(job, saved) {
   const closes = deadlineTag(job.deadline);
   if (closes) tags.push(closes);
   const apply = el("button", { className: "primary apply", textContent: "Apply" });
-  apply.onclick = async () => { await saveJob(job); chrome.tabs.create({ url: job.url }); renderList(); };
+  apply.onclick = async () => { await saveJob(job); await openJob(job.url, JobFeed.jobKeyFor(job.url)); renderList(); };
   const save = el("button", { className: "link", textContent: saved ? "Saved ✓" : "Save for later", disabled: saved });
   save.onclick = async () => { await saveJob(job); renderList(); };
   const hide = el("button", { className: "link", textContent: "Not interested" });
@@ -230,14 +268,14 @@ function jobCard(job, saved) {
   return el("div", { className: "card" },
     el("div", { className: "info" },
       el("a", { className: "title", href: job.url, target: "_blank", rel: "noopener", textContent: job.title }), ...tags,
-      el("div", { className: "meta", textContent: [job.company, job.location, postedText(job.days)].filter(Boolean).join(" · ") }),
+      el("div", { className: "meta", textContent: [job.company, job.location, postedText(job.days), job.source === "Adzuna" && "via Adzuna"].filter(Boolean).join(" · ") }),
       el("div", { className: "small" }, save, hide)),
     apply);
 }
 
 function savedCard(a) {
   const apply = el("button", { className: "primary apply", textContent: "Apply", disabled: !a.url });
-  apply.onclick = () => chrome.tabs.create({ url: a.url });
+  apply.onclick = () => openJob(a.url, a.key);
   const done = el("button", { className: "link", textContent: "I applied ✓", title: "Applied already (e.g. LinkedIn Easy Apply)" });
   done.onclick = () => changeApp(a.id, { status: "Applied", appliedOn: today() });
   const remove = el("button", { className: "link", textContent: "Remove" });
@@ -305,23 +343,45 @@ document.querySelectorAll(".tab").forEach((b) => (b.onclick = () => showTab(b.da
 $("filterText").oninput = renderList;
 
 // ---------- Search links for sites that can't be read ----------
-function renderLinks() {
-  const roles = list(settings.roles).slice(0, 3), loc = list(settings.locations).find((l) => !/^remote$/i.test(l)) || "India";
-  const fresher = settings.level === "fresher", days = settings.age;
-  const li = new URLSearchParams({ keywords: roles.join(" OR "), location: loc, f_TPR: "r" + Number(days) * 86400 });
+// One location's links. Fresher: LinkedIn internship + entry level, Naukri jobs whose range
+// includes 1 year (0-1, 0-2, 1-3...), and Indeed fresher words with senior titles left out.
+function searchLinks(loc) {
+  const roles = list(settings.roles).slice(0, 3), first = roles[0] || "software engineer";
+  const fresher = settings.level === "fresher", days = settings.age, remote = /^remote$/i.test(loc);
+  const li = new URLSearchParams({ keywords: roles.join(" OR "), location: remote ? "India" : loc, f_TPR: "r" + Number(days) * 86400 });
+  if (remote) li.set("f_WT", "2");
   if (fresher) li.set("f_E", "1,2");
   const nq = new URLSearchParams({ k: roles.join(", "), l: loc });
-  if (fresher) nq.set("experience", "0");
-  const links = [
-    ["LinkedIn Jobs", "https://www.linkedin.com/jobs/search/?" + li],
-    ["Naukri", `https://www.naukri.com/${slug(roles[0] || "software engineer")}-jobs-in-${slug(loc)}?${nq}`],
-    ["Indeed", `https://in.indeed.com/jobs?q=${enc(roles.join(" or ") + (fresher ? " fresher" : ""))}&l=${enc(loc)}&fromage=${days === "30" ? 14 : days}`],
-    ["Foundit", `https://www.foundit.in/srp/results?query=${enc(roles.join(","))}&locations=${enc(loc)}`],
-    ["Google Jobs", `https://www.google.com/search?q=${enc((roles[0] || "software engineer") + (fresher ? " fresher" : "") + " jobs " + loc)}&ibp=htl;jobs`],
+  if (fresher) nq.set("experience", "1");
+  const indeedRoles = roles.map((r) => `"${r}"`).join(" or ");
+  const indeedQ = fresher ? `(${indeedRoles}) (fresher or "entry level" or junior or trainee) -senior -lead -manager` : indeedRoles;
+  return [
+    ["LinkedIn", "https://www.linkedin.com/jobs/search/?" + li],
+    ["Naukri", `https://www.naukri.com/${slug(first)}-jobs-in-${slug(loc)}?${nq}`],
+    ["Indeed", `https://in.indeed.com/jobs?q=${enc(indeedQ)}&l=${enc(loc)}&fromage=${days === "30" ? 14 : days}`],
+    ["Foundit", `https://www.foundit.in/srp/results?query=${enc(roles.join(","))}&locations=${enc(loc)}` + (fresher ? "&experienceRanges=0~1&experience=0" : "")],
+    ["Google Jobs", `https://www.google.com/search?q=${enc(first + (fresher ? " fresher" : "") + " jobs " + loc)}&udm=8`],
   ];
-  $("links").innerHTML = "";
-  for (const [name, url] of links) $("links").append(el("a", { className: "src", href: url, target: "_blank", rel: "noopener" }, name, el("span", { textContent: loc })));
 }
+
+// Your own list if you've edited it, otherwise your preferred cities and all of India.
+function linkCities() {
+  const own = list(settings.linkCities);
+  if (own.length) return own;
+  const mine = list(settings.locations);
+  return mine.some((l) => /^india$/i.test(l)) ? mine : [...mine, "India"];
+}
+
+function renderLinks() {
+  const cities = linkCities();
+  $("linkCities").value = cities.join(", ");
+  $("links").innerHTML = "";
+  for (const loc of cities) {
+    $("links").append(el("div", { className: "linkrow" }, el("b", { textContent: loc }),
+      ...searchLinks(loc).map(([name, url]) => el("a", { className: "src", href: url, target: "_blank", rel: "noopener", textContent: name }))));
+  }
+}
+$("linkCities").addEventListener("change", () => { settings.linkCities = $("linkCities").value; saveState(); renderLinks(); });
 
 // ---------- Storage ----------
 function saveState() {

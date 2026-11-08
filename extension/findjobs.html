@@ -66,10 +66,11 @@
   .co.off { opacity: .45; text-decoration: line-through; }
   .addrow { display: flex; gap: 8px; margin-top: 8px; }
   .addrow input { flex: 1; }
-  .links { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
-  a.src { display: block; border: 1px solid var(--b); border-radius: 10px; padding: 8px 12px; text-decoration: none; color: var(--t); font-size: 14px; }
+  .links { margin-top: 10px; }
+  .linkrow { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .linkrow b { width: 110px; font-size: 14px; overflow-wrap: anywhere; }
+  a.src { border: 1px solid var(--b); border-radius: 8px; padding: 5px 10px; text-decoration: none; color: var(--t); font-size: 13px; }
   a.src:hover { border-color: var(--a); }
-  a.src span { display: block; font-size: 12px; color: var(--m); }
   @media (max-width: 600px) { .card { flex-direction: column; align-items: stretch; } .settings { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -112,6 +113,8 @@
     <summary>More: companies checked, LinkedIn / Naukri / Indeed</summary>
     <h3>Search LinkedIn, Naukri, Indeed yourself</h3>
     <p class="hint">These sites don't let tools read their jobs. Open one, click a job, and press <b>Alt+Shift+S</b> to save it here under Saved.</p>
+    <label class="hint" for="linkCities">Cities to search (comma separated, add "Remote" or "India" too)</label>
+    <div class="addrow"><input id="linkCities" placeholder="Kochi, Bangalore, Chennai, Remote, India"></div>
     <div class="links" id="links"></div>
     <h3>Companies checked (<span id="coCount">0</span>)</h3>
     <p class="hint">Click × to skip a company. Companies you save jobs from are added automatically.</p>

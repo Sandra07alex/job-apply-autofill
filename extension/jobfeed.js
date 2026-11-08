@@ -326,8 +326,9 @@
       const fresher = FRESHER_RE.test(j.title);
       if (opts.level === "fresher") {
         if (SENIOR_RE.test(j.title)) continue;
+        // 1 year or less: "0-2 years" and "1-3 years" stay, "2+ years" goes.
         const yrs = minYears(j.text);
-        if (yrs !== null && yrs >= 3) continue;
+        if (yrs !== null && yrs >= 2) continue;
       }
       const midLevel = /\b(engineer|developer|sde)[\s-]*(ii|2)\b|\b(intermediate|mid[\s-]?level)\b/i.test(j.title); // usually 1–3 years
       jobs.push({ title: j.title.trim(), company: j.company, location: j.location, days: j.days, url: j.url, source: j.source, fresher, midLevel, where, deadline });
