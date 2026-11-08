@@ -14,6 +14,13 @@
     ...[["hevodata", "Hevo Data"], ["zeta", "Zeta"], ["cred", "CRED"], ["nium", "Nium"], ["outreach", "Outreach"]].map(([id, name]) => ["lever", id, name]),
     ...[["sarvam", "Sarvam AI"], ["atlan", "Atlan"], ["composio", "Composio"], ["perplexity", "Perplexity"],
       ["airwallex", "Airwallex"]].map(([id, name]) => ["ashby", id, name]),
+    // Added Nov 2026: Indian product companies and startups (checked to list India jobs).
+    ...[["sigmoid", "Sigmoid"], ["zenoti", "Zenoti"], ["zetaglobal", "Zeta Global"], ["nasdaq", "Nasdaq"]].map(([id, name]) => ["greenhouse", id, name]),
+    ...[["paytm", "Paytm"], ["meesho", "Meesho"], ["mindtickle", "Mindtickle"], ["pocketfm", "Pocket FM"]].map(([id, name]) => ["lever", id, name]),
+    ...[["tekion", "Tekion"], ["bureau", "Bureau"], ["spotdraft", "SpotDraft"]].map(([id, name]) => ["ashby", id, name]),
+    ...[["swiggy", "Swiggy"], ["BoschGroup", "Bosch"], ["ServiceNow", "ServiceNow"], ["LinkedIn3", "LinkedIn"], ["freshworks", "Freshworks"],
+      ["Ubisoft2", "Ubisoft"], ["unacademy", "Unacademy"], ["whatfix", "Whatfix"], ["upstox", "Upstox"], ["nobroker", "NoBroker"], ["cars24", "Cars24"],
+      ["newtonschool", "Newton School"], ["interviewbit", "InterviewBit"], ["freecharge", "Freecharge"]].map(([id, name]) => ["smartrecruiters", id, name]),
     ...[["intel.wd1.myworkdayjobs.com|intel|External", "Intel"], ["nvidia.wd5.myworkdayjobs.com|nvidia|NVIDIAExternalCareerSite", "NVIDIA"],
       ["salesforce.wd12.myworkdayjobs.com|salesforce|External_Career_Site", "Salesforce"], ["adobe.wd5.myworkdayjobs.com|adobe|external_experienced", "Adobe"],
       ["mastercard.wd1.myworkdayjobs.com|mastercard|CorporateCareers", "Mastercard"], ["hp.wd5.myworkdayjobs.com|hp|ExternalCareerSite", "HP"],
@@ -39,6 +46,7 @@
     }
     if (u.hostname === "jobs.lever.co" && parts[0]) return ["lever", parts[0], parts[0]];
     if (u.hostname === "jobs.ashbyhq.com" && parts[0]) return ["ashby", parts[0], parts[0]];
+    if (/^(jobs|careers)\.smartrecruiters\.com$/.test(u.hostname) && parts[0]) return ["smartrecruiters", parts[0], parts[0]];
     const wd = u.hostname.match(/^([\w-]+)\.wd\d+\.myworkdayjobs\.com$/);
     if (wd) {
       const site = /^[a-z]{2}-[A-Z]{2}$/.test(parts[0] || "") ? parts[1] : parts[0];
@@ -63,10 +71,22 @@
     return (title) => {
       const t = new Set(words(title.replace(/\bsde\b|\bswe\b/gi, "software engineer")).map(stem));
       const anyGeneric = [...t].some((w) => GENERIC.has(w));
+      // A role's own kind of word must be there too ("Trainee Engineer" needs "engineer"), so
+      // "Training Developer" doesn't match it. Synonyms come from relatedRoles().
       return parsed.some((p) => p.specific.length
-        ? p.specific.every((w) => t.has(w)) && (anyGeneric || !p.generic.length)
+        ? p.specific.every((w) => t.has(w)) && (p.generic.every((w) => t.has(w)) || (!p.generic.length && anyGeneric))
         : p.generic.every((w) => t.has(w)));
     };
+  }
+
+  // Titles software freshers are hired under, added when your roles are software roles.
+  const RELATED_SOFTWARE = ["Software Developer", "Software Development Engineer", "SDE", "Associate Software Engineer", "Associate Engineer",
+    "Graduate Engineer Trainee", "Trainee Engineer", "Software Engineer Intern", "Backend Developer", "Backend Engineer", "Frontend Developer",
+    "Frontend Engineer", "Full Stack Developer", "Full Stack Engineer", "Web Developer", "React Developer", "Node.js Developer", "Python Developer",
+    "JavaScript Developer", "Mobile Developer", "React Native Developer", "Application Developer", "Programmer"];
+  function relatedRoles(roles) {
+    const software = roles.some((r) => /software|developer|engineer|programmer|full ?stack|web|backend|frontend|sde/i.test(r));
+    return software ? [...new Set([...roles, ...RELATED_SOFTWARE])] : roles;
   }
 
   const CITY_ALIASES = [["bangalore", "bengaluru"], ["kochi", "cochin", "ernakulam", "infopark"], ["trivandrum", "thiruvananthapuram", "technopark"],
@@ -95,7 +115,7 @@
 
   // Senior titles, including company levels: "Engineer 4", Salesforce SMTS/LMTS/PMTS, "AVP".
   const SENIOR_RE = /\b(senior|sr\.?|lead|principal|staff|manager|director|head|architect|vp|avp|vice president|chief|distinguished|fellow|expert|iii|iv|smts|lmts|pmts)\b|\b(engineer|developer|sde)[\s-]*([3-9]|v)\b/i;
-  const FRESHER_RE = /\b(intern|internship|graduate|grad|new grad|fresher|junior|jr\.?|entry|trainee|apprentice|associate|campus|university)\b|\b(engineer|developer|sde)[\s-]*(i|1)\b/i;
+  const FRESHER_RE = /\b(intern|internship|graduate|grad|new grad|fresher|junior|jr\.?|entry|trainee|apprentice|associate|campus|university|amts)\b|\b(engineer|developer|sde)[\s-]*(i|1)\b/i;
 
   // Smallest "N years" the description asks for, e.g. "3+ years" -> 3, "0-2 years" -> 0.
   function minYears(text) {
@@ -119,7 +139,7 @@
   const daysSince = (date) => (date ? Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / DAY)) : null);
 
   async function getJson(fetchFn, url, init) {
-    const r = await fetchFn(url, { ...init, signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined });
+    const r = await fetchFn(url, { ...init, signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined });
     if (!r.ok) throw new Error("HTTP " + r.status);
     return r.json();
   }
@@ -145,6 +165,21 @@
       return (d.jobs || []).filter((j) => j.isListed !== false).map((j) => ({ title: j.title, company: name,
         location: [j.location, ...(j.secondaryLocations || []).map((x) => x.location), j.isRemote ? "Remote" : ""].filter(Boolean).join(", "),
         days: daysSince(j.publishedAt), url: j.jobUrl, source: "Ashby", text: j.descriptionPlain }));
+    },
+    // India jobs only (country=in), up to 300.
+    async smartrecruiters(fetchFn, id, name) {
+      const out = [];
+      for (let offset = 0; offset < 300; offset += 100) {
+        const d = await getJson(fetchFn, `https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(id)}/postings?country=in&limit=100&offset=${offset}`);
+        for (const j of d.content || []) {
+          const l = j.location || {};
+          out.push({ title: j.name, company: (j.company && j.company.name) || name,
+            location: [l.city, l.region, l.country === "in" ? "India" : l.country, l.remote ? "Remote" : ""].filter(Boolean).join(", "),
+            days: daysSince(j.releasedDate), url: `https://jobs.smartrecruiters.com/${encodeURIComponent(id)}/${j.id}`, source: "SmartRecruiters" });
+        }
+        if (offset + 100 >= (d.totalFound || 0)) break;
+      }
+      return out;
     },
     async workday(fetchFn, id, name, opts) {
       const [host, tenant, site] = id.split("|");
@@ -197,27 +232,36 @@
   async function findJobs(opts) {
     const fetchFn = opts.fetch || fetch.bind(root);
     const roles = opts.roles.filter(Boolean), locations = opts.locations.filter(Boolean);
-    const matchRole = roleMatcher(roles);
+    // Fresher jobs often have other names ("SDE I", "Associate Engineer", "React Developer").
+    const matchRole = roleMatcher(opts.related === false ? roles : relatedRoles(roles));
     // Workday searches are global, so add "India" to them (you're applying from India).
     const tasks = opts.companies.map(([kind, id, name]) => async () => READERS[kind](fetchFn, id, name, { roles, india: true }));
     if (locations.some((l) => /^remote$/i.test(l))) tasks.push(() => readRemotive(fetchFn, roles));
     if (opts.adzuna && opts.adzuna.id && opts.adzuna.key) tasks.push(() => readAdzuna(fetchFn, opts.adzuna, roles, locations, opts.maxDays));
 
     const all = [], failed = [];
+    const filterJobs = (found) => filterJobsWith(found, opts, matchRole, locations);
     let done = 0, next = 0;
     async function worker() {
       while (next < tasks.length) {
         const i = next++;
         try { all.push(...await tasks[i]()); } catch (e) { failed.push(i < opts.companies.length ? opts.companies[i][2] : i === opts.companies.length ? "Remotive" : "Adzuna"); }
         done++;
-        if (opts.onProgress) opts.onProgress(done, tasks.length);
+        // Every few sources, hand back the jobs so far so the page can show them while it keeps looking.
+        if (opts.onProgress) opts.onProgress(done, tasks.length, done % 8 === 0 || done === tasks.length ? () => filterJobs(all) : null);
       }
     }
-    await Promise.all(Array.from({ length: opts.concurrency || 5 }, worker));
+    await Promise.all(Array.from({ length: opts.concurrency || 8 }, worker));
+    return { jobs: filterJobs(all), failed, checked: tasks.length };
+  }
 
+  // Keep the jobs that fit, best first. Used for the final list and the lists shown on the way.
+  function filterJobsWith(all, opts, matchRole, locations) {
     const seen = new Set();
     const jobs = [];
     for (const j of all) {
+      // "Deputy Manager_Application Engineer" -> words the filters can see.
+      if (j.title) j.title = String(j.title).replace(/_/g, " ").replace(/\s+/g, " ").trim();
       // The same job can come back under two links (Workday lists it per location search).
       const same = [j.company, j.title, j.location].join("|").toLowerCase();
       if (!j.title || !j.url || seen.has(j.url) || seen.has(same)) continue;
@@ -233,12 +277,12 @@
         const yrs = minYears(j.text);
         if (yrs !== null && yrs >= 3) continue;
       }
-      const midLevel = /\b(engineer|developer|sde)[\s-]*(ii|2)\b/i.test(j.title); // usually 1–3 years
+      const midLevel = /\b(engineer|developer|sde)[\s-]*(ii|2)\b|\b(intermediate|mid[\s-]?level)\b/i.test(j.title); // usually 1–3 years
       jobs.push({ title: j.title.trim(), company: j.company, location: j.location, days: j.days, url: j.url, source: j.source, fresher, midLevel, where });
     }
     // Fresher-friendly first, then your city, then newest.
     jobs.sort((a, b) => (b.fresher - a.fresher) || (b.where - a.where) || ((a.days ?? 99) - (b.days ?? 99)));
-    return { jobs, failed, checked: tasks.length };
+    return jobs;
   }
 
   // The tracker's key for a job, matching fill.js's jobKey() for the same job's apply page.

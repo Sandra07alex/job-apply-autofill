@@ -7,112 +7,111 @@
 <style>
   :root { --b: #e5e7eb; --t: #1f2937; --m: #6b7280; --a: #2563eb; }
   body { font-family: system-ui, sans-serif; color: var(--t); background: #f9fafb; margin: 0; }
-  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 60px; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  h2 { font-size: 16px; margin: 0; }
-  h3 { font-size: 13px; color: var(--m); text-transform: uppercase; letter-spacing: .04em; margin: 14px 0 6px; }
-  p.sub { color: var(--m); margin: 0 0 16px; font-size: 14px; }
-  .hint { color: var(--m); font-size: 12px; line-height: 1.5; margin: 4px 0 0; }
-  section, details { background: #fff; border: 1px solid var(--b); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-  summary { cursor: pointer; font-weight: 600; font-size: 15px; }
-  details[open] summary { margin-bottom: 10px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
-  label { display: flex; flex-direction: column; font-size: 12px; color: var(--m); gap: 4px; }
-  label.wide { grid-column: 1 / -1; }
-  input, select { font: inherit; font-size: 14px; color: var(--t); padding: 8px; border: 1px solid var(--b); border-radius: 8px; }
-  button { font: inherit; font-size: 13px; border: 1px solid var(--b); background: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  [hidden] { display: none !important; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { font-size: 24px; margin: 0 0 12px; }
+  button { font: inherit; font-size: 14px; border: 1px solid var(--b); background: #fff; border-radius: 8px; padding: 7px 14px; cursor: pointer; color: var(--t); }
   button.primary { background: var(--a); color: #fff; border-color: var(--a); font-weight: 600; }
+  button.link { border: 0; background: none; padding: 2px 4px; color: var(--m); font-size: 13px; }
+  button.link:hover { color: var(--a); text-decoration: underline; }
   button:disabled { opacity: .5; cursor: default; }
-  .bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  input, select { font: inherit; font-size: 14px; color: var(--t); padding: 8px 10px; border: 1px solid var(--b); border-radius: 8px; box-sizing: border-box; }
+
+  /* What you're looking for: one line, settings open on "Change" */
+  .looking { display: flex; align-items: center; gap: 10px; background: #fff; border: 1px solid var(--b); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
+  .looking .what { flex: 1; font-size: 14px; line-height: 1.5; }
+  .looking .what b { font-weight: 600; }
+  .settings { background: #fff; border: 1px solid var(--b); border-radius: 12px; padding: 14px; margin: -4px 0 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .settings label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--m); }
+  .settings label.wide { grid-column: 1 / -1; }
+  .settings .done { grid-column: 1 / -1; justify-self: end; }
+
+  /* Get more jobs */
+  .more-jobs { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; font-size: 14px; line-height: 1.5; }
+  .more-jobs .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .more-jobs input { flex: 1; min-width: 160px; }
+  .more-jobs ol { margin: 6px 0 0; padding-left: 20px; }
+
+  /* Tabs and list */
+  .bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .tab { border-radius: 999px; padding: 7px 16px; }
+  .tab.on { background: var(--t); color: #fff; border-color: var(--t); }
+  .tab b { margin-left: 4px; }
   .grow { flex: 1; }
   #status { font-size: 13px; color: var(--m); }
-  progress { width: 160px; height: 8px; }
-  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 10px; }
-  .chip { border-radius: 999px; padding: 4px 12px; }
-  .chip b { margin-left: 4px; }
-  .chip.on { background: var(--t); color: #fff; border-color: var(--t); }
-  #filterText { width: 100%; box-sizing: border-box; margin-bottom: 10px; }
-  .job { display: flex; gap: 12px; align-items: flex-start; padding: 12px 4px; border-top: 1px solid var(--b); }
-  .job:first-child { border-top: 0; }
-  .job .info { flex: 1; min-width: 0; }
-  .job a.title { font-weight: 600; font-size: 15px; color: var(--t); text-decoration: none; }
-  .job a.title:hover { color: var(--a); text-decoration: underline; }
-  .job .meta { font-size: 13px; color: var(--m); margin-top: 3px; }
-  .job .acts { display: flex; gap: 6px; flex-shrink: 0; }
-  .job .acts button { padding: 4px 10px; font-size: 12px; }
+  progress { width: 120px; height: 8px; }
+  #filterText { width: 100%; margin-bottom: 10px; }
+  .card { background: #fff; border: 1px solid var(--b); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; display: flex; gap: 14px; align-items: center; }
+  .card .info { flex: 1; min-width: 0; }
+  .card a.title { font-weight: 600; font-size: 16px; color: var(--t); text-decoration: none; }
+  .card a.title:hover { color: var(--a); text-decoration: underline; }
+  .card .meta { font-size: 13px; color: var(--m); margin-top: 4px; }
+  .card .small { margin-top: 4px; margin-left: -4px; }
+  .card .apply { flex-shrink: 0; padding: 9px 20px; }
   .tag { display: inline-block; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 1px 8px; margin-left: 6px; vertical-align: 2px; }
-  .t-fresher { background: #dcfce7; color: #166534; }
-  .t-mid { background: #f3f4f6; color: #4b5563; }
-  .t-new { background: #dbeafe; color: #1e40af; }
-  .t-saved { background: #fef3c7; color: #92400e; }
-  .empty { color: var(--m); font-size: 14px; padding: 20px 4px; }
+  .t-fresher { background: #dcfce7; color: #166534; } .t-new { background: #dbeafe; color: #1e40af; } .t-mid { background: #f3f4f6; color: #4b5563; }
+  .empty { color: var(--m); font-size: 14px; padding: 24px 4px; text-align: center; line-height: 1.6; }
+
+  /* More (closed by default) */
+  details.more { background: #fff; border: 1px solid var(--b); border-radius: 12px; padding: 12px 14px; margin-top: 20px; }
+  details.more summary { cursor: pointer; font-weight: 600; }
+  details.more h3 { font-size: 13px; color: var(--m); text-transform: uppercase; letter-spacing: .04em; margin: 16px 0 6px; }
+  .hint { color: var(--m); font-size: 12px; line-height: 1.5; margin: 4px 0 0; }
   .companies { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
-  .co { font-size: 12px; border: 1px solid var(--b); border-radius: 999px; padding: 2px 4px 2px 10px; display: inline-flex; align-items: center; gap: 2px; }
-  .co button { border: 0; padding: 0 6px; color: var(--m); background: none; }
+  .co { font-size: 12px; border: 1px solid var(--b); border-radius: 999px; padding: 2px 4px 2px 10px; display: inline-flex; align-items: center; }
+  .co button { border: 0; padding: 0 6px; color: var(--m); background: none; font-size: 12px; }
   .co.off { opacity: .45; text-decoration: line-through; }
-  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
-  .row input { flex: 1; min-width: 200px; }
-  .links { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
-  a.src { display: block; border: 1px solid var(--b); border-radius: 10px; padding: 10px 12px; text-decoration: none; color: var(--t); background: #fff; }
+  .addrow { display: flex; gap: 8px; margin-top: 8px; }
+  .addrow input { flex: 1; }
+  .links { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+  a.src { display: block; border: 1px solid var(--b); border-radius: 10px; padding: 8px 12px; text-decoration: none; color: var(--t); font-size: 14px; }
   a.src:hover { border-color: var(--a); }
-  a.src b { display: block; font-size: 14px; margin-bottom: 2px; }
-  a.src span { font-size: 12px; color: var(--m); line-height: 1.4; }
-  .loc-head { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; }
-  @media (max-width: 600px) { .job { flex-direction: column; } }
+  a.src span { display: block; font-size: 12px; color: var(--m); }
+  @media (max-width: 600px) { .card { flex-direction: column; align-items: stretch; } .settings { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 <main>
   <h1>Find jobs</h1>
-  <p class="sub">Jobs from companies' own career sites, filtered for your roles, locations and level, in one list. Apply opens the job; Save adds it to My applications.</p>
 
-  <section>
-    <h2 style="margin-bottom:10px">What you're looking for</h2>
-    <div class="grid">
-      <label class="wide">Roles (comma separated)<input id="roles" placeholder="Software Engineer, Full Stack Developer, Backend Developer"></label>
-      <label class="wide">Locations (comma separated; "Remote" works too)<input id="locations" placeholder="Kochi, Bangalore, Remote"></label>
-      <label>Experience
-        <select id="level"><option value="fresher">Fresher / entry level (0–2 years)</option><option value="any">Any</option></select></label>
-      <label>Posted within
-        <select id="age"><option value="1">Past 24 hours</option><option value="7">Past week</option><option value="30">Past month</option></select></label>
-    </div>
-  </section>
+  <div class="looking">
+    <div class="what" id="what"></div>
+    <button id="change">Change</button>
+  </div>
+  <div class="settings" id="settings" hidden>
+    <label class="wide">Roles (comma separated)<input id="roles" placeholder="Software Engineer, Full Stack Developer"></label>
+    <label class="wide">Cities you prefer (jobs anywhere in India are shown too; add "Remote" for remote jobs)<input id="locations" placeholder="Kochi, Bangalore, Remote"></label>
+    <label>Experience
+      <select id="level"><option value="fresher">Fresher / entry level</option><option value="any">Any level</option></select></label>
+    <label>Posted within
+      <select id="age"><option value="1">Past 24 hours</option><option value="7">Past week</option><option value="30">Past month</option></select></label>
+    <button class="primary done" id="done">Show jobs</button>
+  </div>
 
-  <section>
-    <div class="bar">
-      <h2>Jobs for you</h2><span class="grow"></span>
-      <progress id="progress" hidden></progress><span id="status"></span>
-      <button id="refresh" class="primary">Find jobs now</button>
-    </div>
-    <div class="chips" id="chips"></div>
-    <input id="filterText" type="search" placeholder="Filter by title, company or city">
-    <div id="jobs"></div>
-  </section>
+  <div class="more-jobs" id="moreJobs" hidden></div>
 
-  <section>
-    <div class="bar"><h2>Saved jobs to apply to (<span id="savedCount">0</span>)</h2></div>
-    <p class="hint" style="margin:0 0 6px">Jobs you saved anywhere: from this page, or on LinkedIn, Naukri, Indeed and company sites with
-      <b>Alt+Shift+S</b> (or the popup's <b>Save job for later</b>). Open a job, apply, and it moves to My applications as In progress and then Applied.</p>
-    <div id="saved"></div>
-  </section>
+  <div class="bar">
+    <button class="tab on" data-tab="jobs">Jobs for you <b id="jobsCount">0</b></button>
+    <button class="tab" data-tab="saved">Saved <b id="savedCount">0</b></button>
+    <span class="grow"></span>
+    <progress id="progress" hidden></progress><span id="status"></span>
+    <button id="refresh" title="Check for new jobs">↻ Refresh</button>
+  </div>
+  <input id="filterText" type="search" placeholder="Filter by title, company or city">
+  <div id="list"></div>
 
-  <details id="sources">
-    <summary>Companies and sources (<span id="coCount">0</span>)</summary>
-    <p class="hint">These companies' career sites are checked. Click × to skip one. Companies you save jobs from or apply to on Greenhouse, Lever, Ashby or Workday are added automatically.</p>
+  <details class="more" id="more">
+    <summary>More: companies checked, LinkedIn / Naukri / Indeed</summary>
+    <h3>Search LinkedIn, Naukri, Indeed yourself</h3>
+    <p class="hint">These sites don't let tools read their jobs. Open one, click a job, and press <b>Alt+Shift+S</b> to save it here under Saved.</p>
+    <div class="links" id="links"></div>
+    <h3>Companies checked (<span id="coCount">0</span>)</h3>
+    <p class="hint">Click × to skip a company. Companies you save jobs from are added automatically.</p>
     <div class="companies" id="companies"></div>
-    <div class="row"><input id="addUrl" placeholder="Add a company: paste its careers page link (Greenhouse, Lever, Ashby or Workday)"><button id="addCo">Add</button></div>
+    <div class="addrow"><input id="addUrl" placeholder="Add a company: paste its careers page link (Greenhouse, Lever, Ashby, Workday)"><button id="addCo">Add</button></div>
     <p class="hint" id="addMsg"></p>
-    <h3>More Indian job sites (optional)</h3>
-    <p class="hint">Adzuna collects jobs from many Indian job sites (good for Kochi and smaller cities). Get a free key at
-      <a href="https://developer.adzuna.com/" target="_blank" rel="noopener">developer.adzuna.com</a> and paste it here. Stored only in this browser.</p>
-    <div class="row"><input id="adzId" placeholder="Adzuna App ID"><input id="adzKey" placeholder="Adzuna App key"></div>
-  </details>
-
-  <details id="more">
-    <summary>Search LinkedIn, Naukri, Indeed… and save jobs with Alt+Shift+S</summary>
-    <p class="hint">These sites don't allow tools to read their listings (LinkedIn can restrict accounts that use one), so open a search below,
-      click a job, and press <b>Alt+Shift+S</b>: it's added to <b>Saved jobs</b> above with its link, company and city.</p>
-    <div id="results"></div>
+    <h3>Adzuna key</h3>
+    <div class="addrow"><input id="adzId2" placeholder="App ID"><input id="adzKey2" placeholder="App key"></div>
   </details>
 </main>
 <script src="jobfeed.js"></script>
