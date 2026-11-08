@@ -9,7 +9,7 @@ const job = (n, title, company) => ({ title, company, location: 'Kochi', days: 1
 (async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
-  const feed = { at: Date.now(), failed: [], checked: 1, jobs: [job(1, 'Web Developer', 'One Co'), job(2, 'React Developer', 'Two Co'), job(3, 'Python Developer', 'Three Co'), job(4, 'Java Developer', 'Hidden Co')] };
+  const feed = { at: Date.now(), failed: [], checked: 1, jobs: [job(1, 'Web Developer', 'One Co'), job(2, 'React Developer', 'Two Co'), { ...job(3, 'Python Developer', 'Three Co'), deadline: '2030-11-30' }, job(4, 'Java Developer', 'Hidden Co')] };
   const existing = { id: 'old', key: 'jobs.example.com/view/2', url: feed.jobs[1].url, status: 'Applied', role: 'React Developer' };
   await page.addInitScript(({ feed, existing }) => {
     const store = { jobSearch: { roles: 'Developer', locations: 'Kochi', level: 'fresher', age: '30' }, jobFeed: feed, jobFeedState: { hidden: ['https://jobs.example.com/view/4'] }, applications: [existing] };
@@ -45,6 +45,18 @@ const job = (n, title, company) => ({ title, company, location: 'Kochi', days: 1
   a = await apps();
   assert.deepStrictEqual(a.map((x) => x.id), ['old'], 'Undo removes only that batch');
   assert.strictEqual(await page.textContent('#saveAll'), 'Save all 2');
+
+  // Last date: carried into Saved, soonest first, and you can type one in.
+  assert.ok((await page.textContent('#list')).includes('Apply by 30 Nov'), 'shown on the job');
+  await page.click('#saveAll');
+  await page.click('[data-tab=saved]');
+  assert.ok((await page.textContent('#list .card:first-child')).includes('Python Developer'), 'a job with a date comes first');
+  const dates = page.locator('#list input[type=date]');
+  assert.strictEqual(await dates.nth(0).inputValue(), '2030-11-30');
+  await dates.nth(1).fill('2030-06-01');
+  await dates.nth(1).dispatchEvent('change');
+  assert.ok((await page.textContent('#list .card:first-child')).includes('Web Developer'), 'typing a sooner date moves it to the top');
+  assert.strictEqual((await apps()).find((x) => x.role === 'Web Developer').deadline, '2030-06-01');
 
   assert.deepStrictEqual(errors, []);
   await browser.close();

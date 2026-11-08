@@ -76,6 +76,28 @@ const fakeFetch = async (url) => {
   assert.deepStrictEqual(badKey.failed, ['Adzuna'], 'a failed Adzuna is named Adzuna, not Remotive');
   assert.strictEqual(badKey.adzunaError, 'HTTP 401');
 
+  // Last date to apply: read when published, closed jobs dropped, never invented.
+  for (const [text, want] of [
+    ['Last date to apply: 30th Nov 2030', '2030-11-30'],
+    ['Applications close:&lt;/strong&gt; 3 Dec 2030&lt;/li&gt;', '2030-12-03'],
+    ['Apply by December 5, 2030.', '2030-12-05'],
+    ['Application deadline - Friday, 6 December 2030', '2030-12-06'],
+    ['Last date: 05/12/2030', '2030-12-05'],
+    ['Closing date 2030-01-15', '2030-01-15'],
+    ['Apply by 31 Feb 2030', ''],
+    ['We closed a funding round on 3 Dec 2030', ''],
+    ['Apply today, 5 years of experience', ''],
+    ['', ''],
+  ]) assert.strictEqual(F.findDeadline(text), want, text);
+  const dated = await F.findJobs({ roles: ['Software Engineer'], locations: ['Kochi'], level: 'any', maxDays: 30, companies: [['lever', 'x', 'X'], ['greenhouse', 'y', 'Y']],
+    fetch: async (url) => ({ ok: true, status: 200, json: async () => (url.includes('lever') ? [
+      { text: 'Software Engineer', categories: { location: 'Kochi' }, hostedUrl: 'https://l/open', createdAt: Date.now(), descriptionPlain: 'Last date to apply: 30 Nov 2030' },
+      { text: 'Software Developer', categories: { location: 'Kochi' }, hostedUrl: 'https://l/closed', createdAt: Date.now(), descriptionPlain: 'Last date to apply: 30 Nov 2020' },
+      { text: 'Software Programmer', categories: { location: 'Kochi' }, hostedUrl: 'https://l/none', createdAt: Date.now(), descriptionPlain: 'Join us' },
+    ] : { jobs: [{ title: 'Web Developer', location: { name: 'Kochi' }, absolute_url: 'https://g/1', first_published: new Date().toISOString(), application_deadline: '2030-10-01T00:00:00Z' }] }) }) });
+  const when = Object.fromEntries(dated.jobs.map((j) => [j.url, j.deadline]));
+  assert.deepStrictEqual(when, { 'https://l/open': '2030-11-30', 'https://l/none': '', 'https://g/1': '2030-10-01' });
+
   // Small pieces
   assert.deepStrictEqual(F.parseCareerUrl('https://intel.wd1.myworkdayjobs.com/en-US/External/job/India-Bangalore/X_JR1'), ['workday', 'intel.wd1.myworkdayjobs.com|intel|External', 'intel']);
   assert.deepStrictEqual(F.parseCareerUrl('https://job-boards.greenhouse.io/stripe/jobs/123'), ['greenhouse', 'stripe', 'stripe']);

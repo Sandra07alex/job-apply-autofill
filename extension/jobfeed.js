@@ -127,6 +127,35 @@
     return min;
   }
 
+  // ---------- Last date to apply ----------
+  const localToday = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+  const MONTH = "(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\\.?";
+  const DEADLINE_LABEL = "(?:last date(?:\\s+(?:to|for|of)\\s+[a-z]+(?:\\s+[a-z]+)?)?|apply (?:by|before|on or before)|applications? deadline|deadline(?:\\s+(?:to|for)\\s+[a-z]+)?" +
+    "|closing date(?:\\s+for\\s+applications?)?|applications? (?:close|closes|closing)(?:\\s+on)?)[\\s:–—-]*(?:is\\s+|on\\s+|by\\s+)?(?:[a-z]+day,?\\s+)?";
+  const DEADLINE_FORMS = [
+    [new RegExp(DEADLINE_LABEL + "(\\d{1,2})(?:st|nd|rd|th)?\\s*(?:of\\s+)?" + MONTH + "[,\\s]*(\\d{4})?", "i"), (m) => [m[3], m[2], m[1]]],
+    [new RegExp(DEADLINE_LABEL + MONTH + "\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s*(\\d{4})?", "i"), (m) => [m[3], m[1], m[2]]],
+    [new RegExp(DEADLINE_LABEL + "(\\d{4})-(\\d{2})-(\\d{2})", "i"), (m) => [m[1], m[2], m[3]]],
+    [new RegExp(DEADLINE_LABEL + "(\\d{1,2})[/.-](\\d{1,2})[/.-](\\d{4}|\\d{2})\\b", "i"), (m) => [m[3], m[2], m[1]]], // day first, as in India
+  ];
+  const monthNumber = (m) => (/^\d+$/.test(m) ? Number(m) : "janfebmaraprmayjunjulaugsepoctnovdec".indexOf(m.slice(0, 3).toLowerCase()) / 3 + 1);
+
+  // "Last date to apply: 30th Nov 2026" -> "2026-11-30". "" when the text doesn't state one.
+  function findDeadline(text) {
+    const plain = String(text || "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    for (const [re, parts] of DEADLINE_FORMS) {
+      const m = plain.match(re);
+      if (!m) continue;
+      const [y, mon, d] = parts(m), month = monthNumber(mon), day = Number(d);
+      let year = y ? Number(y) + (y.length === 2 ? 2000 : 0) : new Date().getFullYear();
+      // No year given, and the date is long gone: it means next year.
+      if (!y && Date.UTC(year, month - 1, day) < Date.now() - 60 * 864e5) year++;
+      const date = new Date(Date.UTC(year, month - 1, day));
+      if (date.getUTCMonth() === month - 1 && date.getUTCDate() === day) return date.toISOString().slice(0, 10);
+    }
+    return "";
+  }
+
   // ---------- Reading the feeds ----------
   const DAY = 864e5;
   function postedDaysFromText(t) {
@@ -149,7 +178,8 @@
     async greenhouse(fetchFn, id, name) {
       const d = await getJson(fetchFn, `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(id)}/jobs`);
       return (d.jobs || []).map((j) => ({ title: j.title, company: j.company_name || name, location: (j.location && j.location.name) || "",
-        days: daysSince(j.first_published || j.updated_at), url: j.absolute_url, source: "Greenhouse" }));
+        days: daysSince(j.first_published || j.updated_at), url: j.absolute_url, source: "Greenhouse",
+        deadline: j.application_deadline ? String(j.application_deadline).slice(0, 10) : "" }));
     },
     async lever(fetchFn, id, name) {
       const d = await getJson(fetchFn, `https://api.lever.co/v0/postings/${encodeURIComponent(id)}?mode=json`);
@@ -288,6 +318,8 @@
       seen.add(same);
       if (!matchRole(j.title)) continue;
       if (j.days !== null && j.days > opts.maxDays) continue;
+      const deadline = j.deadline || findDeadline(j.text);
+      if (deadline && deadline < localToday()) continue; // applications have closed
       // Adzuna's India search is all India, including cities the location check doesn't know.
       const where = locationScore(j.location, locations) || (j.inIndia ? 2 : 0);
       if (!where) continue;
@@ -298,7 +330,7 @@
         if (yrs !== null && yrs >= 3) continue;
       }
       const midLevel = /\b(engineer|developer|sde)[\s-]*(ii|2)\b|\b(intermediate|mid[\s-]?level)\b/i.test(j.title); // usually 1–3 years
-      jobs.push({ title: j.title.trim(), company: j.company, location: j.location, days: j.days, url: j.url, source: j.source, fresher, midLevel, where });
+      jobs.push({ title: j.title.trim(), company: j.company, location: j.location, days: j.days, url: j.url, source: j.source, fresher, midLevel, where, deadline });
     }
     // Fresher-friendly first, then your city, then newest.
     jobs.sort((a, b) => (b.fresher - a.fresher) || (b.where - a.where) || ((a.days ?? 99) - (b.days ?? 99)));
@@ -313,7 +345,7 @@
       (gh ? "?gh_jid=" + gh : "");
   }
 
-  const api = { STARTER_COMPANIES, parseCareerUrl, roleMatcher, locationScore, minYears, postedDaysFromText, findJobs, jobKeyFor };
+  const api = { STARTER_COMPANIES, parseCareerUrl, roleMatcher, locationScore, minYears, findDeadline, postedDaysFromText, findJobs, jobKeyFor };
   root.JobFeed = api;
   if (typeof module !== "undefined") module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -720,6 +720,7 @@
       const org = jp.hiringOrganization;
       const a = ([].concat(jp.jobLocation || [])[0] || {}).address || {};
       return { title: decode(jp.title), company: decode(typeof org === "string" ? org : org && org.name),
+        deadline: (String(jp.validThrough || "").match(/^\d{4}-\d{2}-\d{2}/) || [""])[0],
         location: [a.addressLocality, a.addressRegion].filter(Boolean).join(", ") || (/TELECOMMUTE/i.test(jp.jobLocationType || "") ? "Remote" : "") };
     }
     return null;
@@ -921,7 +922,8 @@
     } else {
       const company = job ? job.company : guessCompany();
       app = { id: Date.now().toString(36), key, url: job ? job.url : jobUrl(), company, role: job ? job.role : guessRole(company),
-        location: job ? job.location : guessLocation(), status, created: today(), updated: today(), appliedOn: "", notes: job ? job.notes : "" };
+        location: job ? job.location : guessLocation(), status, created: today(), updated: today(), appliedOn: "", notes: job ? job.notes : "",
+        deadline: job ? "" : (jobPostingLd() || {}).deadline || "" };
       apps.push(app);
     }
     await setStore({ applications: apps });

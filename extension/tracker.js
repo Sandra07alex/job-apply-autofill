@@ -61,6 +61,8 @@ function row(app) {
 
   const applied = el("input", { type: "date", value: app.appliedOn || "" });
   applied.onchange = () => update(app, { appliedOn: applied.value });
+  const lastDate = el("input", { type: "date", value: app.deadline || "", title: "Last date to apply" });
+  lastDate.onchange = () => update(app, { deadline: lastDate.value });
 
   const icons = el("td", { className: "icons" });
   if (app.url) icons.appendChild(el("a", { href: app.url, target: "_blank", rel: "noopener", title: "Open job", textContent: "↗" }));
@@ -77,6 +79,7 @@ function row(app) {
     textCell(app, "company", "company", "Company"),
     textCell(app, "role", "role", "Role"),
     statusCell,
+    el("td", {}, lastDate),
     el("td", {}, applied),
     textCell(app, "notes", "notes", "Notes (recruiter, salary, next step…)"),
     icons);
@@ -111,7 +114,7 @@ document.getElementById("add").onclick = () => {
 };
 
 document.getElementById("csv").onclick = () => {
-  const cols = [["Company", "company"], ["Role", "role"], ["Status", "status"], ["Applied on", "appliedOn"],
+  const cols = [["Company", "company"], ["Role", "role"], ["Status", "status"], ["Last date to apply", "deadline"], ["Applied on", "appliedOn"],
     ["First filled", "created"], ["Last update", "updated"], ["Link", "url"], ["Notes", "notes"]];
   const cell = (v) => `"${String(v || "").replace(/"/g, '""')}"`;
   const csv = [cols.map((c) => cell(c[0])).join(","), ...apps.map((a) => cols.map((c) => cell(a[c[1]])).join(","))].join("\r\n");

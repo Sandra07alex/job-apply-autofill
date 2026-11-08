@@ -209,6 +209,18 @@ loc.addEventListener('input',()=>setTimeout(()=>{ul.innerHTML='';for(const o of 
     if(JSON.stringify([a[0].role,a[0].company,a[0].location,a[0].url])!==JSON.stringify(want)||a.length!==1) throw new Error('save on '+site+' wrong');
     await pg.close();
   }
+  // A job page's published closing date is saved with the job.
+  {
+    const pg=await browser.newPage();
+    await pg.route('https://careers.example.com/**',r=>r.fulfill({contentType:'text/html',body:`<title>x</title><h1>Dev</h1><script type="application/ld+json">{"@type":"JobPosting","title":"Dev","validThrough":"2030-11-30T23:59:00+05:30","hiringOrganization":"Acme"}</script>`}));
+    await pg.goto('https://careers.example.com/job/1');
+    await pg.evaluate(p=>{window.__AUTOFILL_TEST__={profile:p};window.__AUTOFILL_SAVE_ONLY__=true},profile);
+    await pg.evaluate(src);
+    const a=await pg.evaluate(()=>window.__AUTOFILL_TEST__.applications);
+    console.log('   saved last date  ',a[0].deadline);
+    if(a[0].deadline!=='2030-11-30') throw new Error('deadline not saved');
+    await pg.close();
+  }
   // Google Jobs: two jobs are two entries (even on a site that tells jobs apart by ?id=), and with no job open nothing is saved.
   {
     const panel=(title,co,id)=>`<h1>${title}</h1><div>${co} · Kochi · via Example</div><a href="https://jobs.example.com/view?id=${id}&utm_source=google">Apply on Example</a>`;

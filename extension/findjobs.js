@@ -143,7 +143,17 @@ const siteName = (url) => {
 };
 
 const newApplication = (job, key, id) => ({ id, key, url: job.url, company: job.company, role: job.title, location: job.location, status: "To apply",
-  created: today(), updated: today(), appliedOn: "", notes: `Found via Find jobs (${job.source})` });
+  created: today(), updated: today(), appliedOn: "", notes: `Found via Find jobs (${job.source})`, deadline: job.deadline || "" });
+
+// "Apply by 30 Nov", red when 3 days or fewer are left. Nothing when no date is known.
+function deadlineTag(iso) {
+  if (!iso) return null;
+  const left = Math.round((Date.parse(iso) - Date.parse(today())) / 864e5);
+  const date = new Date(iso + "T00:00:00Z").toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
+  const textContent = left < 0 ? `Last date passed (${date})` : left === 0 ? "Last date today"
+    : `Apply by ${date}` + (left <= 7 ? ` (${left} day${left === 1 ? "" : "s"} left)` : "");
+  return el("span", { className: "tag " + (left <= 3 ? "t-urgent" : "t-date"), textContent });
+}
 
 async function saveJob(job) {
   const { applications: apps = [] } = await chrome.storage.local.get("applications");
@@ -209,6 +219,8 @@ function jobCard(job, saved) {
   if (job.fresher) tags.push(el("span", { className: "tag t-fresher", textContent: "Fresher-friendly" }));
   if (job.midLevel) tags.push(el("span", { className: "tag t-mid", textContent: "Usually 1–3 years" }));
   if (seen.size && !seen.has(job.url)) tags.push(el("span", { className: "tag t-new", textContent: "New" }));
+  const closes = deadlineTag(job.deadline);
+  if (closes) tags.push(closes);
   const apply = el("button", { className: "primary apply", textContent: "Apply" });
   apply.onclick = async () => { await saveJob(job); chrome.tabs.create({ url: job.url }); renderList(); };
   const save = el("button", { className: "link", textContent: saved ? "Saved ✓" : "Save for later", disabled: saved });
@@ -230,11 +242,14 @@ function savedCard(a) {
   done.onclick = () => changeApp(a.id, { status: "Applied", appliedOn: today() });
   const remove = el("button", { className: "link", textContent: "Remove" });
   remove.onclick = () => changeApp(a.id, null);
+  const date = el("input", { type: "date", value: a.deadline || "", title: "Last date to apply" });
+  date.onchange = () => changeApp(a.id, { deadline: date.value });
+  const closes = deadlineTag(a.deadline);
   return el("div", { className: "card" },
     el("div", { className: "info" },
-      el("a", { className: "title", href: a.url || "#", target: "_blank", rel: "noopener", textContent: a.role || "(no title)" }),
+      el("a", { className: "title", href: a.url || "#", target: "_blank", rel: "noopener", textContent: a.role || "(no title)" }), ...(closes ? [closes] : []),
       el("div", { className: "meta", textContent: [a.company, a.location, a.url && "from " + siteName(a.url)].filter(Boolean).join(" · ") }),
-      el("div", { className: "small" }, done, remove)),
+      el("div", { className: "small" }, done, remove, el("label", { className: "lastdate" }, "Last date to apply ", date))),
     apply);
 }
 
@@ -253,7 +268,9 @@ function renderList() {
   const q = $("filterText").value.trim().toLowerCase();
   const match = (...parts) => !q || parts.join(" ").toLowerCase().includes(q);
   const jobs = feed ? feed.jobs.filter((j) => !hidden.has(j.url)) : [];
-  const saved = applications.filter((a) => a.status === "To apply").sort((a, b) => (b.created || "").localeCompare(a.created || ""));
+  // Soonest last date first, then jobs with no date, newest first.
+  const saved = applications.filter((a) => a.status === "To apply")
+    .sort((a, b) => (a.deadline || "9999").localeCompare(b.deadline || "9999") || (b.created || "").localeCompare(a.created || ""));
   $("jobsCount").textContent = jobs.length;
   $("savedCount").textContent = saved.length;
 
