@@ -142,15 +142,59 @@ const siteName = (url) => {
   } catch (_) { return ""; }
 };
 
+const newApplication = (job, key, id) => ({ id, key, url: job.url, company: job.company, role: job.title, location: job.location, status: "To apply",
+  created: today(), updated: today(), appliedOn: "", notes: `Found via Find jobs (${job.source})` });
+
 async function saveJob(job) {
   const { applications: apps = [] } = await chrome.storage.local.get("applications");
   const key = JobFeed.jobKeyFor(job.url);
   if (!apps.some((a) => a.key === key)) {
-    apps.push({ id: Date.now().toString(36), key, url: job.url, company: job.company, role: job.title, location: job.location, status: "To apply",
-      created: today(), updated: today(), appliedOn: "", notes: `Found via Find jobs (${job.source})` });
+    apps.push(newApplication(job, key, Date.now().toString(36)));
     await chrome.storage.local.set({ applications: apps });
   }
   applications = apps;
+}
+
+// Save all: the jobs on screen now (your filter and "Not interested" apply), written in one go.
+let lastSavedAll = null; // keys added by the last Save all, for Undo
+function jobsOnScreen() {
+  const q = $("filterText").value.trim().toLowerCase();
+  return (feed ? feed.jobs : []).filter((j) => !hidden.has(j.url) && (!q || [j.title, j.company, j.location].join(" ").toLowerCase().includes(q)));
+}
+$("saveAll").onclick = async () => {
+  const { applications: apps = [] } = await chrome.storage.local.get("applications");
+  const have = new Set(apps.map((a) => a.key));
+  const stamp = Date.now().toString(36);
+  lastSavedAll = new Set();
+  jobsOnScreen().forEach((job, i) => {
+    const key = JobFeed.jobKeyFor(job.url);
+    if (have.has(key)) return;
+    have.add(key);
+    lastSavedAll.add(key);
+    apps.push(newApplication(job, key, stamp + i));
+  });
+  await chrome.storage.local.set({ applications: apps });
+  applications = apps;
+  $("bulkMsg").textContent = `Saved ${lastSavedAll.size} job${lastSavedAll.size === 1 ? "" : "s"}. They're in the Saved tab.`;
+  renderList();
+};
+$("undoAll").onclick = async () => {
+  const { applications: apps = [] } = await chrome.storage.local.get("applications");
+  applications = apps.filter((a) => !(lastSavedAll.has(a.key) && a.status === "To apply"));
+  await chrome.storage.local.set({ applications });
+  lastSavedAll = null;
+  $("bulkMsg").textContent = "";
+  renderList();
+};
+function renderBulk() {
+  const keys = savedKeys();
+  const toSave = tab === "jobs" && feed && !feed.partial ? jobsOnScreen().filter((j) => !keys.has(JobFeed.jobKeyFor(j.url))).length : 0;
+  const undoable = tab === "jobs" && !!(lastSavedAll && lastSavedAll.size);
+  $("saveAll").hidden = !toSave;
+  $("saveAll").textContent = `Save all ${toSave}`;
+  $("undoAll").hidden = !undoable;
+  $("bulkMsg").hidden = tab !== "jobs";
+  $("bulk").hidden = !toSave && !undoable;
 }
 async function changeApp(id, change) {
   const { applications: apps = [] } = await chrome.storage.local.get("applications");
@@ -205,6 +249,7 @@ function adzunaStatus() {
 function renderList() {
   const box = $("list");
   box.innerHTML = "";
+  renderBulk();
   const q = $("filterText").value.trim().toLowerCase();
   const match = (...parts) => !q || parts.join(" ").toLowerCase().includes(q);
   const jobs = feed ? feed.jobs.filter((j) => !hidden.has(j.url)) : [];

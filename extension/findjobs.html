@@ -41,6 +41,7 @@
   #status { font-size: 13px; color: var(--m); }
   progress { width: 120px; height: 8px; }
   #filterText { width: 100%; margin-bottom: 10px; }
+  .bulk { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; font-size: 13px; color: var(--m); }
   .card { background: #fff; border: 1px solid var(--b); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; display: flex; gap: 14px; align-items: center; }
   .card .info { flex: 1; min-width: 0; }
   .card a.title { font-weight: 600; font-size: 16px; color: var(--t); text-decoration: none; }
@@ -98,6 +99,11 @@
     <button id="refresh" title="Check for new jobs">↻ Refresh</button>
   </div>
   <input id="filterText" type="search" placeholder="Filter by title, company or city">
+  <div class="bulk" id="bulk" hidden>
+    <button class="primary" id="saveAll"></button>
+    <span id="bulkMsg"></span>
+    <button class="link" id="undoAll" hidden>Undo</button>
+  </div>
   <div id="list"></div>
 
   <details class="more" id="more">
