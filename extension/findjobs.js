@@ -6,9 +6,11 @@ const list = (s) => String(s || "").split(",").map((x) => x.trim()).filter(Boole
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
 const STALE_MS = 12 * 3600e3; // refresh by itself when the list is older than this
-const AGE_TEXT = { 1: "past 24 hours", 7: "past week", 30: "past month" };
+const AGE_TEXT = { 1: "past 24 hours", 3: "past 3 days", 7: "past week", 14: "past 2 weeks", 30: "past month" };
+const LEVEL_TEXT = { fresher: "fresher / entry level", junior: "up to 3 years", any: "any level" };
+const MAX_AGE = 30; // every job this recent is fetched; the filters above the list narrow it instantly
 
-let settings = { roles: "", locations: "", level: "fresher", age: "30" };
+let settings = { roles: "", locations: "", level: "fresher", age: "30", confirmed: false };
 // feed: last results; seen: links shown before ("New" = not seen); hidden: links you hid;
 // custom/removed: companies you added or skipped; adzuna: your free key.
 let feed = null, seen = new Set(), hidden = new Set(), custom = [], removed = new Set(), adzuna = { id: "", key: "" };
@@ -29,13 +31,15 @@ function renderWhat() {
   $("what").append(
     el("b", { textContent: roles.join(", ") || "No roles yet" }), " · ",
     locs.length ? `${locs.join(", ")} first, then anywhere in India` : "anywhere in India", " · ",
-    settings.level === "fresher" ? "fresher / entry level" : "any level", " · ", AGE_TEXT[settings.age] || "");
+    LEVEL_TEXT[settings.level] || "", " · ", AGE_TEXT[settings.age] || "");
 }
 $("change").onclick = () => { $("settings").hidden = !$("settings").hidden; };
 $("done").onclick = () => { $("settings").hidden = true; renderWhat(); renderLinks(); refresh(); };
-for (const id of ["roles", "locations", "level", "age"]) {
-  $(id).addEventListener(id === "roles" || id === "locations" ? "input" : "change", () => { settings[id] = $(id).value; saveState(); renderWhat(); });
-}
+for (const id of ["roles", "locations"]) $(id).addEventListener("input", () => { settings[id] = $(id).value; saveState(); renderWhat(); });
+// The filters work on the list already found, so they apply at once.
+const filtersChanged = () => { saveState(); renderWhat(); renderLinks(); renderList(); };
+for (const id of ["level", "age"]) $(id).addEventListener("change", () => { settings[id] = $(id).value; filtersChanged(); });
+$("confirmed").addEventListener("change", () => { settings.confirmed = $("confirmed").checked; filtersChanged(); });
 
 // ---------- Get more jobs (Adzuna) ----------
 function renderMoreJobs() {
@@ -106,18 +110,18 @@ async function refresh() {
   $("status").textContent = "Looking for jobs…";
   try {
     const r = await JobFeed.findJobs({
-      roles, locations: list(settings.locations), level: settings.level, maxDays: Number(settings.age), companies: activeCompanies(),
+      roles, locations: list(settings.locations), level: "any", maxDays: MAX_AGE, companies: activeCompanies(),
       adzuna: adzuna.id && adzuna.key ? adzuna : null,
       onProgress: (done, total, soFar) => {
         $("progress").max = total; $("progress").value = done;
         // Show what's found so far, while it keeps looking (first time, or when you have no list yet).
         if (soFar && (!feed || feed.partial)) { feed = { at: Date.now(), jobs: soFar(), failed: [], checked: done, partial: true }; renderList(); }
-        $("status").textContent = `Checked ${done} of ${total} sources…`;
+        $("status").textContent = `Checked ${done} of ${total}…`;
       },
     });
     if (feed && feed.partial) feed = null; // the full list replaces the partial one
     if (feed) for (const j of feed.jobs) seen.add(j.url); // "New" = not in the previous list
-    feed = { at: Date.now(), jobs: r.jobs, failed: r.failed, checked: r.checked, adzunaError: r.adzunaError };
+    feed = { version: JobFeed.FEED_VERSION, at: Date.now(), jobs: r.jobs, failed: r.failed, checked: r.checked, adzunaError: r.adzunaError };
     saveState();
     showTab("jobs");
   } catch (e) {
@@ -133,7 +137,7 @@ function ago(ms) {
   const m = Math.round(ms / 60000);
   return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`;
 }
-const postedText = (d) => (d === null || d === undefined ? "" : d === 0 ? "posted today" : d === 1 ? "posted yesterday" : `posted ${d} days ago`);
+const postedText = (d) => (d === null || d === undefined ? "posting date not listed" : d === 0 ? "posted today" : d === 1 ? "posted yesterday" : `posted ${d} days ago`);
 const savedKeys = () => new Set(applications.flatMap(knownKeys));
 const siteName = (url) => {
   try {
@@ -205,9 +209,11 @@ async function saveJob(job) {
 
 // Save all: the jobs on screen now (your filter and "Not interested" apply), written in one go.
 let lastSavedAll = null; // keys added by the last Save all, for Undo
+const notHidden = () => (feed ? feed.jobs : []).filter((j) => !hidden.has(j.url));
+const fitting = () => notHidden().filter((j) => JobFeed.fitsFilters(j, { level: settings.level, maxDays: Number(settings.age), confirmed: settings.confirmed }));
 function jobsOnScreen() {
   const q = $("filterText").value.trim().toLowerCase();
-  return (feed ? feed.jobs : []).filter((j) => !hidden.has(j.url) && (!q || [j.title, j.company, j.location].join(" ").toLowerCase().includes(q)));
+  return fitting().filter((j) => !q || [j.title, j.company, j.location].join(" ").toLowerCase().includes(q));
 }
 $("saveAll").onclick = async () => {
   const { applications: apps = [] } = await chrome.storage.local.get("applications");
@@ -259,6 +265,7 @@ function jobCard(job, saved) {
   if (seen.size && !seen.has(job.url)) tags.push(el("span", { className: "tag t-new", textContent: "New" }));
   const closes = deadlineTag(job.deadline);
   if (closes) tags.push(closes);
+  const asks = job.years === null || job.years === undefined ? "" : job.years === 0 ? "no experience needed" : `asks for ${job.years}+ year${job.years === 1 ? "" : "s"}`;
   const apply = el("button", { className: "primary apply", textContent: "Apply" });
   apply.onclick = async () => { await saveJob(job); await openJob(job.url, JobFeed.jobKeyFor(job.url)); renderList(); };
   const save = el("button", { className: "link", textContent: saved ? "Saved ✓" : "Save for later", disabled: saved });
@@ -268,7 +275,7 @@ function jobCard(job, saved) {
   return el("div", { className: "card" },
     el("div", { className: "info" },
       el("a", { className: "title", href: job.url, target: "_blank", rel: "noopener", textContent: job.title }), ...tags,
-      el("div", { className: "meta", textContent: [job.company, job.location, postedText(job.days), job.source === "Adzuna" && "via Adzuna"].filter(Boolean).join(" · ") }),
+      el("div", { className: "meta", textContent: [job.company, job.location, postedText(job.days), asks, job.source === "Adzuna" && "via Adzuna"].filter(Boolean).join(" · ") }),
       el("div", { className: "small" }, save, hide)),
     apply);
 }
@@ -305,7 +312,9 @@ function renderList() {
   renderBulk();
   const q = $("filterText").value.trim().toLowerCase();
   const match = (...parts) => !q || parts.join(" ").toLowerCase().includes(q);
-  const jobs = feed ? feed.jobs.filter((j) => !hidden.has(j.url)) : [];
+  const jobs = fitting(), found = notHidden().length;
+  $("filters").hidden = tab !== "jobs";
+  $("filterInfo").textContent = found && found !== jobs.length ? `Showing ${jobs.length} of ${found} found` : "";
   // Soonest last date first, then jobs with no date, newest first.
   const saved = applications.filter((a) => a.status === "To apply")
     .sort((a, b) => (a.deadline || "9999").localeCompare(b.deadline || "9999") || (b.created || "").localeCompare(a.created || ""));
@@ -330,7 +339,8 @@ function renderList() {
   shown.forEach((j) => box.append(jobCard(j, keys.has(JobFeed.jobKeyFor(j.url)))));
   if (!shown.length) {
     box.append(el("p", { className: "empty", textContent: jobs.length ? "Nothing matches your filter."
-      : "No matching jobs right now. Try “Past month” or more roles (Change, above), or add an Adzuna key for many more jobs." }));
+      : found ? `None of the ${found} jobs found fit these filters. Try a longer “Posted” period or a wider “Experience”.`
+      : "No matching jobs right now. Try more roles (Change, above), or add an Adzuna key for many more jobs." }));
   }
 }
 
@@ -347,19 +357,19 @@ $("filterText").oninput = renderList;
 // includes 1 year (0-1, 0-2, 1-3...), and Indeed fresher words with senior titles left out.
 function searchLinks(loc) {
   const roles = list(settings.roles).slice(0, 3), first = roles[0] || "software engineer";
-  const fresher = settings.level === "fresher", days = settings.age, remote = /^remote$/i.test(loc);
+  const fresher = settings.level !== "any", junior = settings.level === "junior", days = settings.age, remote = /^remote$/i.test(loc);
   const li = new URLSearchParams({ keywords: roles.join(" OR "), location: remote ? "India" : loc, f_TPR: "r" + Number(days) * 86400 });
   if (remote) li.set("f_WT", "2");
-  if (fresher) li.set("f_E", "1,2");
-  const nq = new URLSearchParams({ k: roles.join(", "), l: loc });
-  if (fresher) nq.set("experience", "1");
+  if (fresher) li.set("f_E", junior ? "1,2,3" : "1,2");
+  const nq = new URLSearchParams({ k: roles.join(", "), l: loc, jobAge: days === "14" ? "15" : days });
+  if (fresher) nq.set("experience", junior ? "3" : "1");
   const indeedRoles = roles.map((r) => `"${r}"`).join(" or ");
   const indeedQ = fresher ? `(${indeedRoles}) (fresher or "entry level" or junior or trainee) -senior -lead -manager` : indeedRoles;
   return [
     ["LinkedIn", "https://www.linkedin.com/jobs/search/?" + li],
     ["Naukri", `https://www.naukri.com/${slug(first)}-jobs-in-${slug(loc)}?${nq}`],
     ["Indeed", `https://in.indeed.com/jobs?q=${enc(indeedQ)}&l=${enc(loc)}&fromage=${days === "30" ? 14 : days}`],
-    ["Foundit", `https://www.foundit.in/srp/results?query=${enc(roles.join(","))}&locations=${enc(loc)}` + (fresher ? "&experienceRanges=0~1&experience=0" : "")],
+    ["Foundit", `https://www.foundit.in/srp/results?query=${enc(roles.join(","))}&locations=${enc(loc)}` + (fresher ? `&experienceRanges=0~${junior ? 3 : 1}&experience=0` : "")],
     ["Google Jobs", `https://www.google.com/search?q=${enc(first + (fresher ? " fresher" : "") + " jobs " + loc)}&udm=8`],
   ];
 }
@@ -409,11 +419,12 @@ chrome.storage.local.get(["jobSearch", "profile", "jobFeed", "jobFeedState", "ap
   applications = s.applications || [];
   feed = s.jobFeed || null;
   for (const id of ["roles", "locations", "level", "age"]) $(id).value = settings[id];
+  $("confirmed").checked = !!settings.confirmed;
   $("adzId2").value = adzuna.id || ""; $("adzKey2").value = adzuna.key || "";
   renderWhat();
   renderMoreJobs();
   renderCompanies();
   renderLinks();
   showTab("jobs");
-  if (!feed || Date.now() - feed.at > STALE_MS) refresh();
+  if (!feed || feed.version !== JobFeed.FEED_VERSION || Date.now() - feed.at > STALE_MS) refresh();
 });

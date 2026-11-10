@@ -9,7 +9,7 @@ const job = (n, title, company) => ({ title, company, location: 'Kochi', days: 1
 (async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
-  const feed = { at: Date.now(), failed: [], checked: 1, jobs: [job(1, 'Web Developer', 'One Co'), job(2, 'React Developer', 'Two Co'), { ...job(3, 'Python Developer', 'Three Co'), deadline: '2030-11-30' }, job(4, 'Java Developer', 'Hidden Co')] };
+  const feed = { version: 2, at: Date.now(), failed: [], checked: 1, jobs: [job(1, 'Web Developer', 'One Co'), job(2, 'React Developer', 'Two Co'), { ...job(3, 'Python Developer', 'Three Co'), deadline: '2030-11-30' }, job(4, 'Java Developer', 'Hidden Co')] };
   const existing = { id: 'old', key: 'jobs.example.com/view/2', url: feed.jobs[1].url, status: 'Applied', role: 'React Developer' };
   await page.addInitScript(({ feed, existing }) => {
     const store = { jobSearch: { roles: 'Developer', locations: 'Kochi', level: 'fresher', age: '30' }, jobFeed: feed, jobFeedState: { hidden: ['https://jobs.example.com/view/4'] }, applications: [existing] };
@@ -84,7 +84,7 @@ const job = (n, title, company) => ({ title, company, location: 'Kochi', days: 1
 
   // Adzuna: Apply follows the tab to the employer, even through a tab opened by Adzuna's own Apply button.
   const adz = await browser.newPage();
-  const adzFeed = { at: Date.now(), failed: [], checked: 1, jobs: [{ ...job(9, 'Web Developer', 'Az Co'), url: 'https://www.adzuna.in/land/ad/9?se=x' }] };
+  const adzFeed = { version: 2, at: Date.now(), failed: [], checked: 1, jobs: [{ ...job(9, 'Web Developer', 'Az Co'), url: 'https://www.adzuna.in/land/ad/9?se=x' }] };
   await adz.addInitScript((feed) => {
     const store = { jobSearch: { roles: 'Developer', locations: 'Kochi', level: 'fresher', age: '30' }, jobFeed: feed, jobFeedState: {}, applications: [] };
     window.__store = store; window.__opened = []; window.__on = {};
@@ -113,6 +113,42 @@ const job = (n, title, company) => ({ title, company, location: 'Kochi', days: 1
   await adz.click('.apply');
   await adz.waitForFunction(() => window.__opened.length === 2);
   assert.ok((await adz.evaluate(() => window.__opened[1])).includes('keka'), 'second Apply goes straight to the employer');
+
+  // Filters: apply at once to the list already found, no new search, and are remembered.
+  const fil = await browser.newPage();
+  const filJobs = [{ ...job(20, 'Graduate Developer', 'A'), days: 0, years: 0 }, { ...job(21, 'Developer', 'B'), days: 5, years: null, fresher: false },
+    { ...job(22, 'Developer II', 'C'), days: 2, years: 3, fresher: false, midLevel: true }, { ...job(23, 'Senior Developer', 'D'), days: 2, years: 8, fresher: false, senior: true },
+    { ...job(24, 'Web Developer', 'E'), days: null, years: 1, fresher: false }, { ...job(25, 'Old Developer', 'F'), days: 25, years: 0, fresher: false }];
+  await fil.addInitScript((feed) => {
+    const store = { jobSearch: { roles: 'Developer', locations: 'Kochi', level: 'fresher', age: '30' }, jobFeed: feed, jobFeedState: {}, applications: [] };
+    window.__store = store; window.__fetches = 0;
+    const realFetch = window.fetch; window.fetch = (...a) => { window.__fetches++; return realFetch(...a); };
+    const pick = (keys) => Object.fromEntries([].concat(keys).map((k) => [k, store[k]]));
+    const ev = () => ({ addListener() {} });
+    window.chrome = { tabs: { create: async () => ({ id: 1 }), onCreated: ev(), onUpdated: ev(), onRemoved: ev() },
+      storage: { onChanged: { addListener() {} }, local: { get: (keys, cb) => (cb ? cb(pick(keys)) : Promise.resolve(pick(keys))), set: (o) => { Object.assign(store, JSON.parse(JSON.stringify(o))); return Promise.resolve(); } } } };
+  }, { version: 2, at: Date.now(), failed: [], checked: 1, jobs: filJobs });
+  await fil.goto(pathToFileURL(path.join(__dirname, '../extension/findjobs.html')).href);
+  const titles = () => fil.$$eval('#list a.title', (a) => a.map((x) => x.textContent).sort());
+  assert.deepStrictEqual(await titles(), ['Developer', 'Graduate Developer', 'Old Developer', 'Web Developer'], 'fresher: no level 2, no senior');
+  assert.strictEqual(await fil.textContent('#filterInfo'), 'Showing 4 of 6 found');
+  await fil.selectOption('#level', 'junior');
+  assert.ok((await titles()).includes('Developer II'), 'up to 3 years');
+  assert.ok(!(await titles()).includes('Senior Developer'));
+  await fil.selectOption('#level', 'any');
+  assert.strictEqual((await titles()).length, 6);
+  assert.strictEqual(await fil.textContent('#saveAll'), 'Save all 6');
+  await fil.selectOption('#age', '3');
+  assert.deepStrictEqual(await titles(), ['Developer II', 'Graduate Developer', 'Senior Developer', 'Web Developer'], 'an undated job stays, older ones go');
+  assert.ok((await fil.textContent('#list')).includes('posting date not listed'));
+  await fil.check('#confirmed');
+  assert.ok(!(await titles()).includes('Web Developer'), 'undated job hidden when dates are required');
+  assert.strictEqual(await fil.textContent('#saveAll'), 'Save all 3', 'Save all follows the filters');
+  assert.strictEqual(await fil.evaluate(() => window.__fetches), 0, 'no new search');
+  assert.deepStrictEqual(await fil.evaluate(() => { const { level, age, confirmed } = window.__store.jobSearch; return { level, age, confirmed }; }), { level: 'any', age: '3', confirmed: true });
+  assert.ok((await fil.$eval('.linkrow a', (a) => a.href)).includes('r259200'), 'search links follow the filter');
+  await fil.click('[data-tab=saved]');
+  assert.ok(await fil.isHidden('#filters'), 'filters are for the Jobs tab');
   await browser.close();
   console.log('findjobs: all checks passed');
 })().catch((e) => { console.error(e); process.exit(1); });

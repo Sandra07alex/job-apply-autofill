@@ -114,20 +114,42 @@
   }
 
   // Senior titles, including company levels: "Engineer 4", Salesforce SMTS/LMTS/PMTS, "AVP".
-  const SENIOR_RE = /\b(senior|sr\.?|lead|principal|staff|manager|director|head|architect|vp|avp|vice president|chief|distinguished|fellow|expert|iii|iv|smts|lmts|pmts)\b|\b(engineer|developer|sde)[\s-]*([3-9]|v)\b/i;
+  const SENIOR_RE = /\b(senior|sr\.?|snr|lead|leader|leadership|principal|staff|manager|mgr|director|head|architect|vp|avp|vice president|chief|distinguished|fellow|expert|experienced|supervisor|iii|iv|smts|lmts|pmts|l[4-9])\b|\b(engineer|developer|sde|swe)[\s-]*([3-9]|v)\b|\blevel[\s-]*[3-9]\b/i;
   const FRESHER_RE = /\b(intern|internship|graduate|grad|new grad|fresher|junior|jr\.?|entry|trainee|apprentice|associate|campus|university|amts)\b|\b(engineer|developer|sde)[\s-]*(i|1)\b/i;
 
-  // Smallest "N years" the description asks for, e.g. "3+ years" -> 3, "0-2 years" -> 0.
+  // The years of experience a job asks for, e.g. "3+ years" -> 3, "0-2 years" -> 0.
+  // "5+ years of experience, 1 year of Go" asks for 5, so the overall requirement is the
+  // highest one that mentions experience. With no such mention, the smallest number found.
   function minYears(text) {
-    let min = null;
-    for (const m of String(text || "").matchAll(/(\d{1,2})\s*(?:\+|plus)?\s*(?:(?:-|to|–)\s*\d{1,2}\s*)?\+?\s*(?:years?|yrs?)\b(?!\s+old\b)/gi)) { // not "10 years old"
+    const s = String(text || "");
+    let any = null, experience = null;
+    for (const m of s.matchAll(/(\d{1,2})\s*(?:\+|plus)?\s*(?:(?:-|to|–)\s*\d{1,2}\s*)?\+?\s*(?:years?|yrs?)\b(?!\s+old\b)/gi)) { // not "10 years old"
       const n = Number(m[1]);
-      if (n <= 20 && (min === null || n < min)) min = n;
+      if (n > 20) continue;
+      if (any === null || n < any) any = n;
+      const before = s.slice(Math.max(0, m.index - 30), m.index), after = s.slice(m.index + m[0].length, m.index + m[0].length + 40);
+      const aboutExperience = /^[^.;\n]*\b(experience|exp)\b/i.test(after) || /\b(experience|exp)\b[^.;\n]*$/i.test(before);
+      if (aboutExperience && (experience === null || n > experience)) experience = n;
     }
-    return min;
+    return experience !== null ? experience : any;
+  }
+
+  // Does a found job fit? level: "fresher" (0-1 years), "junior" (up to 3 years) or "any".
+  // confirmed: leave out jobs that don't state their date or, unless "any", their experience.
+  function fitsFilters(job, { level = "any", maxDays = Infinity, confirmed = false } = {}) {
+    const days = job.days === undefined ? null : job.days, years = job.years === undefined ? null : job.years;
+    if (days === null ? confirmed : days > maxDays) return false;
+    if (level === "any") return true;
+    if (job.senior) return false;
+    if (level === "fresher" && (job.midLevel || (years !== null && years >= 2))) return false; // "0-2" and "1-3" stay, "2+" goes
+    if (level === "junior" && years !== null && years > 3) return false;
+    return !(confirmed && years === null && !job.fresher);
   }
 
   // ---------- Last date to apply ----------
+  const plainText = (s) => String(s || "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16))) // "4&#43; years"
+    .replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
   const localToday = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
   const MONTH = "(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\\.?";
   const DEADLINE_LABEL = "(?:last date(?:\\s+(?:to|for|of)\\s+[a-z]+(?:\\s+[a-z]+)?)?|apply (?:by|before|on or before)|applications? deadline|deadline(?:\\s+(?:to|for)\\s+[a-z]+)?" +
@@ -142,7 +164,7 @@
 
   // "Last date to apply: 30th Nov 2026" -> "2026-11-30". "" when the text doesn't state one.
   function findDeadline(text) {
-    const plain = String(text || "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    const plain = plainText(text);
     for (const [re, parts] of DEADLINE_FORMS) {
       const m = plain.match(re);
       if (!m) continue;
@@ -173,13 +195,15 @@
     return r.json();
   }
 
-  // Each returns [{ title, company, location, days, url, source, text }]
+  // Each returns [{ title, company, location, days, url, source, text }]. Feeds whose list
+  // has no description give detail(), which fetches it for the jobs that are worth checking.
   const READERS = {
     async greenhouse(fetchFn, id, name) {
       const d = await getJson(fetchFn, `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(id)}/jobs`);
       return (d.jobs || []).map((j) => ({ title: j.title, company: j.company_name || name, location: (j.location && j.location.name) || "",
         days: daysSince(j.first_published || j.updated_at), url: j.absolute_url, source: "Greenhouse",
-        deadline: j.application_deadline ? String(j.application_deadline).slice(0, 10) : "" }));
+        deadline: j.application_deadline ? String(j.application_deadline).slice(0, 10) : "",
+        detail: j.id ? async () => plainText((await getJson(fetchFn, `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(id)}/jobs/${j.id}`)).content) : null }));
     },
     async lever(fetchFn, id, name) {
       const d = await getJson(fetchFn, `https://api.lever.co/v0/postings/${encodeURIComponent(id)}?mode=json`);
@@ -202,8 +226,12 @@
       for (let offset = 0; offset < 300; offset += 100) {
         const d = await getJson(fetchFn, `https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(id)}/postings?country=in&limit=100&offset=${offset}`);
         for (const j of d.content || []) {
-          const l = j.location || {};
-          out.push({ title: j.name, company: (j.company && j.company.name) || name,
+          const l = j.location || {}, level = (j.experienceLevel && j.experienceLevel.id) || "";
+          out.push({ title: j.name, levelHint: /^(mid_senior_level|director|executive)$/.test(level) ? "senior" : /^(entry_level|internship)$/.test(level) ? "entry" : "",
+            detail: async () => {
+              const s = ((await getJson(fetchFn, `https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(id)}/postings/${j.id}`)).jobAd || {}).sections || {};
+              return plainText([s.jobDescription, s.qualifications].map((x) => (x && x.text) || "").join(" "));
+            }, company: (j.company && j.company.name) || name,
             location: [l.city, l.region, l.country === "in" ? "India" : l.country, l.remote ? "Remote" : ""].filter(Boolean).join(", "),
             days: daysSince(j.releasedDate), url: `https://jobs.smartrecruiters.com/${encodeURIComponent(id)}/${j.id}`, source: "SmartRecruiters" });
         }
@@ -220,7 +248,8 @@
           body: JSON.stringify({ appliedFacets: {}, limit: 20, offset: 0, searchText: role + (opts.india ? " India" : "") }) });
         for (const j of d.jobPostings || []) {
           out.push({ title: j.title, company: name, location: j.locationsText || "", days: postedDaysFromText(j.postedOn),
-            url: `https://${host}/en-US/${site}${j.externalPath}`, source: "Workday" });
+            url: `https://${host}/en-US/${site}${j.externalPath}`, source: "Workday",
+            detail: async () => plainText(((await getJson(fetchFn, `https://${host}/wday/cxs/${tenant}/${site}${j.externalPath}`, { headers: { Accept: "application/json" } })).jobPostingInfo || {}).jobDescription) });
         }
       }
       return out;
@@ -253,7 +282,7 @@
     for (const { role, city, page } of plan) {
       if (!city && noMore.has(role)) continue;
       const q = new URLSearchParams({ app_id: key.id, app_key: key.key, what: role, results_per_page: String(PER_PAGE),
-        max_days_old: String(maxDays), "content-type": "application/json" });
+        max_days_old: String(maxDays), sort_by: "date", "content-type": "application/json" });
       if (city) q.set("where", city);
       let d;
       // A wrong key fails on the first request. A limit reached later keeps what was found.
@@ -271,7 +300,21 @@
   }
 
   // ---------- Putting it together ----------
-  // opts: { roles, locations, level: "fresher"|"any", maxDays, companies, adzuna: {id,key}|null, fetch, onProgress }
+  // Each lookup is one job's description, so this cap keeps a refresh to about a minute.
+  const MAX_DETAILS = 300;
+  async function readDetails(jobs, concurrency, onEach) {
+    let next = 0;
+    async function worker() {
+      while (next < jobs.length) {
+        const j = jobs[next++];
+        try { j.text = await j.detail(); } catch (_) { /* its experience stays unknown */ }
+        onEach();
+      }
+    }
+    await Promise.all(Array.from({ length: concurrency }, worker));
+  }
+
+  // opts: { roles, locations, level: "fresher"|"junior"|"any", maxDays, companies, adzuna: {id,key}|null, fetch, onProgress }
   async function findJobs(opts) {
     const fetchFn = opts.fetch || fetch.bind(root);
     const roles = opts.roles.filter(Boolean), locations = opts.locations.filter(Boolean);
@@ -301,6 +344,14 @@
       }
     }
     await Promise.all(Array.from({ length: opts.concurrency || 8 }, worker));
+    // Read the description of jobs still in the running whose experience isn't known yet.
+    const byUrl = new Map([...all].reverse().map((j) => [j.url, j])); // the first copy of a job is the one kept
+    const toRead = filterJobs(all).filter((j) => !j.senior && j.years === null).map((j) => byUrl.get(j.url))
+      .filter((j) => j && j.detail && !j.text).slice(0, MAX_DETAILS);
+    await readDetails(toRead, opts.concurrency || 8, () => {
+      done++;
+      if (opts.onProgress) opts.onProgress(done, tasks.length + toRead.length, null);
+    });
     return { jobs: filterJobs(all), failed, checked: tasks.length, adzunaError };
   }
 
@@ -317,21 +368,17 @@
       seen.add(j.url);
       seen.add(same);
       if (!matchRole(j.title)) continue;
-      if (j.days !== null && j.days > opts.maxDays) continue;
       const deadline = j.deadline || findDeadline(j.text);
       if (deadline && deadline < localToday()) continue; // applications have closed
       // Adzuna's India search is all India, including cities the location check doesn't know.
       const where = locationScore(j.location, locations) || (j.inIndia ? 2 : 0);
       if (!where) continue;
-      const fresher = FRESHER_RE.test(j.title);
-      if (opts.level === "fresher") {
-        if (SENIOR_RE.test(j.title)) continue;
-        // 1 year or less: "0-2 years" and "1-3 years" stay, "2+ years" goes.
-        const yrs = minYears(j.text);
-        if (yrs !== null && yrs >= 2) continue;
-      }
+      const senior = SENIOR_RE.test(j.title) || j.levelHint === "senior";
+      const fresher = !senior && (FRESHER_RE.test(j.title) || j.levelHint === "entry");
+      const fromTitle = minYears(j.title), years = fromTitle !== null ? fromTitle : minYears(j.text);
       const midLevel = /\b(engineer|developer|sde)[\s-]*(ii|2)\b|\b(intermediate|mid[\s-]?level)\b/i.test(j.title); // usually 1–3 years
-      jobs.push({ title: j.title.trim(), company: j.company, location: j.location, days: j.days, url: j.url, source: j.source, fresher, midLevel, where, deadline });
+      const job = { title: j.title.trim(), company: j.company, location: j.location, days: j.days, url: j.url, source: j.source, fresher, midLevel, senior, years, where, deadline };
+      if (fitsFilters(job, opts)) jobs.push(job);
     }
     // Fresher-friendly first, then your city, then newest.
     jobs.sort((a, b) => (b.fresher - a.fresher) || (b.where - a.where) || ((a.days ?? 99) - (b.days ?? 99)));
@@ -346,7 +393,9 @@
       (gh ? "?gh_jid=" + gh : "");
   }
 
-  const api = { STARTER_COMPANIES, parseCareerUrl, roleMatcher, locationScore, minYears, findDeadline, postedDaysFromText, findJobs, jobKeyFor };
+  // A saved list from before this version has no experience details, so it's fetched again.
+  const FEED_VERSION = 2;
+  const api = { STARTER_COMPANIES, FEED_VERSION, parseCareerUrl, roleMatcher, locationScore, minYears, fitsFilters, findDeadline, postedDaysFromText, findJobs, jobKeyFor };
   root.JobFeed = api;
   if (typeof module !== "undefined") module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -41,6 +41,9 @@
   #status { font-size: 13px; color: var(--m); }
   progress { width: 120px; height: 8px; }
   #filterText { width: 100%; margin-bottom: 10px; }
+  .filters { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; background: #fff; border: 1px solid var(--b); border-radius: 12px; padding: 10px 14px; margin-bottom: 10px; font-size: 13px; color: var(--m); }
+  .filters label { display: inline-flex; align-items: center; gap: 6px; }
+  .filters select { padding: 5px 8px; }
   .bulk { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; font-size: 13px; color: var(--m); }
   .card { background: #fff; border: 1px solid var(--b); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; display: flex; gap: 14px; align-items: center; }
   .card .info { flex: 1; min-width: 0; }
@@ -85,10 +88,6 @@
   <div class="settings" id="settings" hidden>
     <label class="wide">Roles (comma separated)<input id="roles" placeholder="Software Engineer, Full Stack Developer"></label>
     <label class="wide">Cities you prefer (jobs anywhere in India are shown too; add "Remote" for remote jobs)<input id="locations" placeholder="Kochi, Bangalore, Remote"></label>
-    <label>Experience
-      <select id="level"><option value="fresher">Fresher / entry level</option><option value="any">Any level</option></select></label>
-    <label>Posted within
-      <select id="age"><option value="1">Past 24 hours</option><option value="7">Past week</option><option value="30">Past month</option></select></label>
     <button class="primary done" id="done">Show jobs</button>
   </div>
 
@@ -101,6 +100,14 @@
     <progress id="progress" hidden></progress><span id="status"></span>
     <button id="refresh" title="Check for new jobs">↻ Refresh</button>
   </div>
+  <div class="filters" id="filters">
+    <label>Experience
+      <select id="level"><option value="fresher">Fresher (0–1 years)</option><option value="junior">Up to 3 years</option><option value="any">Any level</option></select></label>
+    <label>Posted
+      <select id="age"><option value="1">Past 24 hours</option><option value="3">Past 3 days</option><option value="7">Past week</option><option value="14">Past 2 weeks</option><option value="30">Past month</option></select></label>
+    <label><input id="confirmed" type="checkbox"> Only jobs that state their date and experience</label>
+    <span class="grow"></span><span id="filterInfo"></span>
+  </div>
   <input id="filterText" type="search" placeholder="Filter by title, company or city">
   <div class="bulk" id="bulk" hidden>
     <button class="primary" id="saveAll"></button>
@@ -112,7 +119,7 @@
   <details class="more" id="more">
     <summary>More: companies checked, LinkedIn / Naukri / Indeed</summary>
     <h3>Search LinkedIn, Naukri, Indeed yourself</h3>
-    <p class="hint">These sites don't let tools read their jobs. Open one, click a job, and press <b>Alt+Shift+S</b> to save it here under Saved.</p>
+    <p class="hint">These sites don't let tools read their jobs. Open one, click a job, and press <b>Alt+Shift+S</b> to save it here under Saved. LinkedIn, Naukri and Indeed links follow your filters above; on Foundit and Google, check the posting date yourself.</p>
     <label class="hint" for="linkCities">Cities to search (comma separated, add "Remote" or "India" too)</label>
     <div class="addrow"><input id="linkCities" placeholder="Kochi, Bangalore, Chennai, Remote, India"></div>
     <div class="links" id="links"></div>

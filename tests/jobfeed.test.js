@@ -45,7 +45,7 @@ const fakeFetch = async (url) => {
   assert.ok(!titles.some((t) => t.startsWith('Full Stack Developer @ Beta')), '4+ years in the description is dropped for freshers');
   assert.strictEqual(r.jobs.filter((j) => j.company === 'Acme' && j.title === 'Software Engineer').length, 0, 'Remote-US and a 2020 posting are dropped');
   assert.strictEqual(r.jobs.filter((j) => j.title.startsWith('Associate Software Developer')).length, 1, 'duplicates removed');
-  assert.ok(r.jobs.find((j) => j.title === 'Software Engineer II').midLevel);
+  assert.ok(!r.jobs.some((j) => j.title === 'Software Engineer II'), 'level 2 is not a fresher job');
   assert.strictEqual(r.jobs[0].fresher, true, 'fresher-friendly jobs come first');
 
   // Adzuna: your city, then all of India over two pages, without showing the key's failure as another source.
@@ -103,7 +103,61 @@ const fakeFetch = async (url) => {
     fetch: async (url) => ({ ok: true, status: 200, json: async () => ({ results: url.includes('where=') ? ['0-1 years', '1-3 years', '2+ years', '5 yrs experience'].map((d, i) => ({ title: 'Software Engineer', company: { display_name: 'C' + i }, location: { display_name: 'Kochi' }, created: new Date().toISOString(), redirect_url: 'https://www.adzuna.in/land/ad/' + i, description: d })) : [] }) }) });
   assert.deepStrictEqual(byYears.jobs.map((j) => j.company).sort(), ['C0', 'C1']);
 
+  // Experience: the feeds without a description are read job by job; senior jobs aren't.
+  const detailCalls = [];
+  const detailed = await F.findJobs({ roles: ['Software Engineer', 'Full Stack Developer'], locations: ['Kochi'], level: 'fresher', maxDays: 30, concurrency: 2, // two roles: Workday returns its job twice
+    companies: [['greenhouse', 'g', 'G'], ['smartrecruiters', 's', 'S'], ['workday', 'w.wd1.myworkdayjobs.com|w|Ext', 'W']],
+    fetch: async (url) => {
+      const u = url.replace('https://', '');
+      detailCalls.push(u);
+      const body = {
+        'boards-api.greenhouse.io/v1/boards/g/jobs': { jobs: [
+          { id: 1, title: 'Software Engineer', location: { name: 'Kochi' }, absolute_url: 'https://g/1', first_published: new Date().toISOString() },
+          { id: 2, title: 'Software Engineer, Platform', location: { name: 'Kochi' }, absolute_url: 'https://g/2', first_published: new Date().toISOString() },
+          { id: 3, title: 'Senior Software Engineer', location: { name: 'Kochi' }, absolute_url: 'https://g/3', first_published: new Date().toISOString() }] },
+        'boards-api.greenhouse.io/v1/boards/g/jobs/1': { content: '&lt;p&gt;You have 6+ years of experience, and 1 year of Go.&lt;/p&gt;' },
+        'boards-api.greenhouse.io/v1/boards/g/jobs/2': { content: '&lt;p&gt;0-1 years of experience.&lt;/p&gt;' },
+        'api.smartrecruiters.com/v1/companies/s/postings?country=in&limit=100&offset=0': { totalFound: 3, content: [
+          { id: 'a', name: 'Software Engineer A', releasedDate: new Date().toISOString(), location: { city: 'Kochi', country: 'in' }, experienceLevel: { id: 'mid_senior_level' } },
+          { id: 'b', name: 'Software Engineer B', releasedDate: new Date().toISOString(), location: { city: 'Kochi', country: 'in' }, experienceLevel: { id: 'entry_level' } },
+          { id: 'c', name: 'Software Engineer C', releasedDate: new Date().toISOString(), location: { city: 'Kochi', country: 'in' }, experienceLevel: { id: 'associate' } }] },
+        'api.smartrecruiters.com/v1/companies/s/postings/b': { jobAd: { sections: { qualifications: { text: 'Fresh graduates welcome' } } } },
+        'api.smartrecruiters.com/v1/companies/s/postings/c': { jobAd: { sections: { qualifications: { text: '<p>Minimum 4 years experience</p>' } } } },
+        'w.wd1.myworkdayjobs.com/wday/cxs/w/Ext/jobs': { jobPostings: [{ title: 'Software Engineer W', externalPath: '/job/1', locationsText: 'Kochi, India', postedOn: 'Posted Today' }] },
+        'w.wd1.myworkdayjobs.com/wday/cxs/w/Ext/job/1': { jobPostingInfo: { jobDescription: '<p>Requires 8&#43; years of experience</p>' } },
+      }[u];
+      return { ok: !!body, status: body ? 200 : 404, json: async () => body };
+    } });
+  assert.deepStrictEqual(detailed.jobs.map((j) => j.title).sort(), ['Software Engineer B', 'Software Engineer, Platform']);
+  assert.strictEqual(detailed.jobs.find((j) => j.title === 'Software Engineer B').fresher, true, "the feed's own entry-level label counts");
+  assert.ok(!detailCalls.some((u) => /jobs\/3$|postings\/a$/.test(u)), 'jobs already known to be senior are not looked up');
+
+  // The filters on the page.
+  const fits = (job, f) => F.fitsFilters({ days: 3, years: null, ...job }, f);
+  for (const title of ['Sr. Software Engineer', 'SWE III', 'Snr Developer', 'Software Engineer L5', 'Developer Level 4', 'Team Leader, Engineering']) {
+    const j = (await F.findJobs({ roles: ['Developer', 'Software Engineer'], locations: ['Kochi'], level: 'fresher', maxDays: 30, related: false, companies: [['greenhouse', 't', 'T']],
+      fetch: async () => ({ ok: true, status: 200, json: async () => ({ jobs: [{ title, location: { name: 'Kochi' }, absolute_url: 'https://t/1', first_published: new Date().toISOString() }] }) }) })).jobs;
+    assert.deepStrictEqual(j, [], title);
+  }
+  assert.ok(!fits({ days: 31 }, { maxDays: 30 }));
+  assert.ok(fits({ days: 30 }, { maxDays: 30 }));
+  assert.ok(fits({ days: null }, { maxDays: 1 }), 'no date is kept unless asked otherwise');
+  assert.ok(!fits({ days: null }, { maxDays: 1, confirmed: true }));
+  assert.ok(!fits({ years: 2 }, { level: 'fresher' }));
+  assert.ok(fits({ years: 1 }, { level: 'fresher' }));
+  assert.ok(!fits({ midLevel: true }, { level: 'fresher' }));
+  assert.ok(fits({ midLevel: true, years: 3 }, { level: 'junior' }));
+  assert.ok(!fits({ years: 4 }, { level: 'junior' }));
+  assert.ok(!fits({ senior: true }, { level: 'junior' }));
+  assert.ok(fits({ senior: true, years: 9 }, { level: 'any' }));
+  assert.ok(!fits({}, { level: 'fresher', confirmed: true }), 'experience not stated');
+  assert.ok(fits({ fresher: true }, { level: 'fresher', confirmed: true }), 'an entry-level title states it');
+
   // Small pieces
+  assert.strictEqual(F.minYears('You have 5+ years of experience, including 1 year of Go.'), 5);
+  assert.strictEqual(F.minYears('5+ years of experience. 2 years of Go experience is a plus.'), 5);
+  assert.strictEqual(F.minYears('We have been around for 12 years. 1-2 years of experience needed.'), 1);
+  assert.strictEqual(F.minYears('Experience: 0-2 years'), 0);
   assert.deepStrictEqual(F.parseCareerUrl('https://intel.wd1.myworkdayjobs.com/en-US/External/job/India-Bangalore/X_JR1'), ['workday', 'intel.wd1.myworkdayjobs.com|intel|External', 'intel']);
   assert.deepStrictEqual(F.parseCareerUrl('https://job-boards.greenhouse.io/stripe/jobs/123'), ['greenhouse', 'stripe', 'stripe']);
   assert.deepStrictEqual(F.parseCareerUrl('https://jobs.lever.co/cred/abc/apply'), ['lever', 'cred', 'cred']);
